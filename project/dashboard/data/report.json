@@ -1,0 +1,1223 @@
+{
+  "generated_at": "2025-12-29T23:04:58",
+  "runs": {
+    "cnn": {
+      "run_id": "20251229-cnn-baseline-par",
+      "model": "cnn",
+      "config": {
+        "run_id": "20251229-cnn-baseline-par",
+        "model": "cnn",
+        "epochs": 5,
+        "batch_size": 128,
+        "lr": 0.001,
+        "optimizer": "adam",
+        "momentum": 0.9,
+        "weight_decay": 0.0,
+        "seeds": [
+          1,
+          2,
+          3
+        ],
+        "data_seed": 123,
+        "val_size": 5000,
+        "num_workers": 0,
+        "num_threads": 2,
+        "device": "cpu",
+        "beta_l1": 0.0,
+        "operator_dropout": 0.0,
+        "gamma": 0.1,
+        "beta_init": 0.01,
+        "hidden_dim": 256,
+        "cnn_hidden_dim": 128,
+        "data_dir": "/home/asakura/randomops/project/data"
+      },
+      "env": {
+        "python": "3.12.10 (main, Jul 31 2025, 12:21:14) [GCC 13.3.0]",
+        "torch": "2.9.1+cu128",
+        "torch_config": "",
+        "torchvision": "0.24.1+cu128",
+        "device": "cpu",
+        "num_threads": 2,
+        "mkldnn": true,
+        "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+        "processor": "x86_64",
+        "cpu_count": 14,
+        "deterministic": true
+      },
+      "summary": {
+        "run_id": "20251229-cnn-baseline-par",
+        "model": "cnn",
+        "seeds": [
+          {
+            "seed": 1,
+            "param_count": 421642,
+            "best_val_accuracy": 0.9912,
+            "test_loss": 0.024740877175412606,
+            "test_accuracy": 0.9926,
+            "wall_time_sec": 1937.0420862210012,
+            "final_train_step_time_ms": 755.8984628636116,
+            "final_train_throughput": 169.21040144517335,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          },
+          {
+            "seed": 2,
+            "param_count": 421642,
+            "best_val_accuracy": 0.989,
+            "test_loss": 0.028551927667576818,
+            "test_accuracy": 0.9921,
+            "wall_time_sec": 1036.8161922940053,
+            "final_train_step_time_ms": 184.43980925860268,
+            "final_train_throughput": 693.4830548084368,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          },
+          {
+            "seed": 3,
+            "param_count": 421642,
+            "best_val_accuracy": 0.9898,
+            "test_loss": 0.02747403655590024,
+            "test_accuracy": 0.9898,
+            "wall_time_sec": 408.3669647729985,
+            "final_train_step_time_ms": 144.27211332480724,
+            "final_train_throughput": 886.5599831131611,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          }
+        ],
+        "aggregate": {
+          "test_accuracy": {
+            "mean": 0.9915,
+            "std": 0.0014933184523068107
+          },
+          "test_loss": {
+            "mean": 0.026922280466296553,
+            "std": 0.001964523491910273
+          },
+          "final_train_step_time_ms": {
+            "mean": 361.53679514900716,
+            "std": 342.117238196412
+          },
+          "final_train_throughput": {
+            "mean": 583.0844797889238,
+            "std": 371.19871983152575
+          },
+          "wall_time_sec": {
+            "mean": 1127.408414429335,
+            "std": 768.3535122370947
+          }
+        }
+      },
+      "curves": {
+        "train": {
+          "epoch": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "accuracy": [
+            0.9425818181818183,
+            0.9832969696969697,
+            0.9887151515151515,
+            0.9913272727272727,
+            0.9930060606060606
+          ],
+          "accuracy_std": [
+            0.0013932541135031696,
+            0.0003027877817405581,
+            0.0005273772101286938,
+            3.636363636361217e-05,
+            0.00014583284140020722
+          ],
+          "loss": [
+            0.18879106743877583,
+            0.0539077532360048,
+            0.03630813928912535,
+            0.02783172908651106,
+            0.021664380473372612
+          ],
+          "loss_std": [
+            0.004872393278014851,
+            0.0015634873586713915,
+            0.000808789784704545,
+            0.000739842327880359,
+            0.00035796322542568576
+          ],
+          "step_time_ms": [
+            501.7949653127546,
+            270.691236488181,
+            303.4830185913997,
+            350.5269903938318,
+            361.5367951490072
+          ],
+          "step_time_ms_std": [
+            312.4225902346365,
+            123.86347406402491,
+            192.52118920888665,
+            266.87648283023094,
+            342.117238196412
+          ],
+          "throughput": [
+            427.1848867138628,
+            565.0783890676186,
+            553.0600363369214,
+            529.0193151468379,
+            583.0844797889238
+          ],
+          "throughput_std": [
+            415.1187624884363,
+            311.14959964980005,
+            331.6823143401735,
+            348.9658967365227,
+            371.19871983152575
+          ],
+          "epoch_time_sec": [
+            310.9017788476728,
+            169.7078104166673,
+            188.49807770999905,
+            216.746222385996,
+            221.92677649166822
+          ],
+          "epoch_time_sec_std": [
+            199.5723705984914,
+            85.71006201261301,
+            127.42955276861953,
+            170.35029248181195,
+            221.4277713074664
+          ]
+        },
+        "val": {
+          "epoch": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "accuracy": [
+            0.9827333333333333,
+            0.9878,
+            0.9879333333333333,
+            0.9886666666666667,
+            0.9898666666666666
+          ],
+          "accuracy_std": [
+            0.0024193663082165678,
+            0.0005999999999999894,
+            0.0020132891827388654,
+            0.0009451631252504802,
+            0.0011718930554164603
+          ],
+          "loss": [
+            0.05787568105931084,
+            0.03983051276185239,
+            0.03798035796328137,
+            0.037485145792489245,
+            0.03198897759712515
+          ],
+          "loss_std": [
+            0.00801911160838839,
+            0.001475752075134996,
+            0.0032443886696104838,
+            0.005141560199742682,
+            0.001471716905047691
+          ]
+        },
+        "test": {
+          "epoch": [
+            5
+          ],
+          "accuracy": [
+            0.9914999999999999
+          ],
+          "accuracy_std": [
+            0.0014933184523068107
+          ],
+          "loss": [
+            0.026922280466296553
+          ],
+          "loss_std": [
+            0.001964523491910273
+          ]
+        }
+      },
+      "param_count": {
+        "mean": 421642.0,
+        "std": 0.0
+      },
+      "wall_time_sec": {
+        "mean": 1127.408414429335,
+        "std": 768.3535122370947
+      },
+      "epoch_to_97": 1,
+      "data_info": {
+        "train_size": 55000,
+        "val_size": 5000,
+        "test_size": 10000,
+        "mean": 0.1307,
+        "std": 0.3081
+      },
+      "derived": {
+        "final_train_accuracy": 0.9930060606060606,
+        "generalization_gap": 0.0015060606060605108,
+        "accuracy_per_wall_time": 0.0008794505942213246,
+        "accuracy_per_param": 2.3515209585382863e-06,
+        "test_accuracy_std": 0.0014933184523068107,
+        "val_accuracy_std_max": 0.0024193663082165678
+      }
+    },
+    "cnn-obl": {
+      "run_id": "20251229-cnn-obl-par",
+      "model": "cnn-obl",
+      "config": {
+        "run_id": "20251229-cnn-obl-par",
+        "model": "cnn-obl",
+        "epochs": 5,
+        "batch_size": 128,
+        "lr": 0.001,
+        "optimizer": "adam",
+        "momentum": 0.9,
+        "weight_decay": 0.0,
+        "seeds": [
+          1,
+          2,
+          3
+        ],
+        "data_seed": 123,
+        "val_size": 5000,
+        "num_workers": 0,
+        "num_threads": 2,
+        "device": "cpu",
+        "beta_l1": 0.0,
+        "operator_dropout": 0.0,
+        "gamma": 0.1,
+        "beta_init": 0.01,
+        "hidden_dim": 256,
+        "cnn_hidden_dim": 128,
+        "data_dir": "/home/asakura/randomops/project/data"
+      },
+      "env": {
+        "python": "3.12.10 (main, Jul 31 2025, 12:21:14) [GCC 13.3.0]",
+        "torch": "2.9.1+cu128",
+        "torch_config": "",
+        "torchvision": "0.24.1+cu128",
+        "device": "cpu",
+        "num_threads": 2,
+        "mkldnn": true,
+        "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+        "processor": "x86_64",
+        "cpu_count": 14,
+        "deterministic": true
+      },
+      "summary": {
+        "run_id": "20251229-cnn-obl-par",
+        "model": "cnn-obl",
+        "seeds": [
+          {
+            "seed": 1,
+            "param_count": 504234,
+            "best_val_accuracy": 0.9908,
+            "test_loss": 0.029788254750939085,
+            "test_accuracy": 0.9897,
+            "wall_time_sec": 2388.511895648,
+            "final_train_step_time_ms": 870.9691367503118,
+            "final_train_throughput": 146.8546667797817,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          },
+          {
+            "seed": 2,
+            "param_count": 504234,
+            "best_val_accuracy": 0.988,
+            "test_loss": 0.03516174255997175,
+            "test_accuracy": 0.9883,
+            "wall_time_sec": 741.2646123509912,
+            "final_train_step_time_ms": 164.9891645744142,
+            "final_train_throughput": 775.2380750752421,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          },
+          {
+            "seed": 3,
+            "param_count": 504234,
+            "best_val_accuracy": 0.9914,
+            "test_loss": 0.03190982263395563,
+            "test_accuracy": 0.9899,
+            "wall_time_sec": 370.4118458209996,
+            "final_train_step_time_ms": 99.36167512955281,
+            "final_train_throughput": 1287.275825273386,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          }
+        ],
+        "aggregate": {
+          "test_accuracy": {
+            "mean": 0.9893,
+            "std": 0.0008717797887081661
+          },
+          "test_loss": {
+            "mean": 0.03228660664828882,
+            "std": 0.0027064861820353804
+          },
+          "final_train_step_time_ms": {
+            "mean": 378.4399921514263,
+            "std": 427.8030628130089
+          },
+          "final_train_throughput": {
+            "mean": 736.4561890428033,
+            "std": 571.198853901291
+          },
+          "wall_time_sec": {
+            "mean": 1166.7294512733304,
+            "std": 1074.219344290236
+          }
+        }
+      },
+      "curves": {
+        "train": {
+          "epoch": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "accuracy": [
+            0.9421454545454546,
+            0.9838666666666667,
+            0.9885333333333333,
+            0.9911393939393939,
+            0.9925939393939394
+          ],
+          "accuracy_std": [
+            0.0022753439482075264,
+            0.0005669501802513419,
+            0.0003364045839121902,
+            0.0005587274009210259,
+            0.00043648988072800667
+          ],
+          "loss": [
+            0.18986605391881684,
+            0.053087424191471305,
+            0.03701204913990064,
+            0.02781213223015269,
+            0.022749076142365283
+          ],
+          "loss_std": [
+            0.007990138214397976,
+            0.0017068398523476852,
+            0.0005412987261729959,
+            0.000795932252439489,
+            0.0007533849816316671
+          ],
+          "step_time_ms": [
+            424.8621667897803,
+            346.58244408867967,
+            416.69702066664405,
+            428.91246869963794,
+            378.4399921514262
+          ],
+          "step_time_ms_std": [
+            336.81775507590936,
+            205.86445166682557,
+            349.5876530583578,
+            491.43636847453234,
+            427.8030628130089
+          ],
+          "throughput": [
+            465.87160525943136,
+            471.3908950471858,
+            475.25515169758745,
+            689.0767434863754,
+            736.4561890428032
+          ],
+          "throughput_std": [
+            344.7427546110238,
+            274.17222236259516,
+            325.2881929718157,
+            573.0135286812158,
+            571.1988539012912
+          ],
+          "epoch_time_sec": [
+            250.91904831499656,
+            206.51533985733113,
+            242.4692499590019,
+            244.0063601803316,
+            212.51570750833102
+          ],
+          "epoch_time_sec_std": [
+            199.9596782582467,
+            131.2228291635459,
+            210.3296474452226,
+            286.003774072293,
+            244.57330010378905
+          ]
+        },
+        "val": {
+          "epoch": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "accuracy": [
+            0.9842000000000001,
+            0.9866666666666667,
+            0.9882,
+            0.9887333333333334,
+            0.9884
+          ],
+          "accuracy_std": [
+            0.0005291502622129227,
+            0.0015534906930307587,
+            0.0012165525060596376,
+            0.001814754345175483,
+            0.002690724809414722
+          ],
+          "loss": [
+            0.053952614418168864,
+            0.04195204217297335,
+            0.03689539486610641,
+            0.03882643176118921,
+            0.03734576752184269
+          ],
+          "loss_std": [
+            0.002189938243935772,
+            0.0016808929457799075,
+            0.0044348362398367635,
+            0.005851585275602996,
+            0.005885837599227193
+          ]
+        },
+        "test": {
+          "epoch": [
+            5
+          ],
+          "accuracy": [
+            0.9893000000000001
+          ],
+          "accuracy_std": [
+            0.000871779788708166
+          ],
+          "loss": [
+            0.03228660664828882
+          ],
+          "loss_std": [
+            0.0027064861820353804
+          ]
+        }
+      },
+      "param_count": {
+        "mean": 504234.0,
+        "std": 0.0
+      },
+      "wall_time_sec": {
+        "mean": 1166.7294512733304,
+        "std": 1074.219344290236
+      },
+      "epoch_to_97": 1,
+      "data_info": {
+        "train_size": 55000,
+        "val_size": 5000,
+        "test_size": 10000,
+        "mean": 0.1307,
+        "std": 0.3081
+      },
+      "derived": {
+        "final_train_accuracy": 0.9925939393939394,
+        "generalization_gap": 0.0032939393939394046,
+        "accuracy_per_wall_time": 0.0008479257971248693,
+        "accuracy_per_param": 1.9619859033702604e-06,
+        "test_accuracy_std": 0.0008717797887081661,
+        "val_accuracy_std_max": 0.002690724809414722
+      }
+    },
+    "mlp": {
+      "run_id": "20251229-mlp-baseline-par",
+      "model": "mlp",
+      "config": {
+        "run_id": "20251229-mlp-baseline-par",
+        "model": "mlp",
+        "epochs": 5,
+        "batch_size": 128,
+        "lr": 0.001,
+        "optimizer": "adam",
+        "momentum": 0.9,
+        "weight_decay": 0.0,
+        "seeds": [
+          1,
+          2,
+          3
+        ],
+        "data_seed": 123,
+        "val_size": 5000,
+        "num_workers": 0,
+        "num_threads": 2,
+        "device": "cpu",
+        "beta_l1": 0.0,
+        "operator_dropout": 0.0,
+        "gamma": 0.1,
+        "beta_init": 0.01,
+        "hidden_dim": 256,
+        "cnn_hidden_dim": 128,
+        "data_dir": "/home/asakura/randomops/project/data"
+      },
+      "env": {
+        "python": "3.12.10 (main, Jul 31 2025, 12:21:14) [GCC 13.3.0]",
+        "torch": "2.9.1+cu128",
+        "torch_config": "",
+        "torchvision": "0.24.1+cu128",
+        "device": "cpu",
+        "num_threads": 2,
+        "mkldnn": true,
+        "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+        "processor": "x86_64",
+        "cpu_count": 14,
+        "deterministic": true
+      },
+      "summary": {
+        "run_id": "20251229-mlp-baseline-par",
+        "model": "mlp",
+        "seeds": [
+          {
+            "seed": 1,
+            "param_count": 203530,
+            "best_val_accuracy": 0.9758,
+            "test_loss": 0.07248112942930311,
+            "test_accuracy": 0.9779,
+            "wall_time_sec": 631.7220050509932,
+            "final_train_step_time_ms": 25.568323741146525,
+            "final_train_throughput": 5002.5134086950375,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          },
+          {
+            "seed": 2,
+            "param_count": 203530,
+            "best_val_accuracy": 0.9788,
+            "test_loss": 0.06762189546562732,
+            "test_accuracy": 0.9786,
+            "wall_time_sec": 710.2119690340041,
+            "final_train_step_time_ms": 70.43874504260363,
+            "final_train_throughput": 1815.8455587983512,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          },
+          {
+            "seed": 3,
+            "param_count": 203530,
+            "best_val_accuracy": 0.9776,
+            "test_loss": 0.07501221365686506,
+            "test_accuracy": 0.9771,
+            "wall_time_sec": 918.0805728770065,
+            "final_train_step_time_ms": 68.08572806828819,
+            "final_train_throughput": 1878.6004935521132,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          }
+        ],
+        "aggregate": {
+          "test_accuracy": {
+            "mean": 0.9778666666666667,
+            "std": 0.0007505553499465418
+          },
+          "test_loss": {
+            "mean": 0.07170507951726517,
+            "std": 0.00375578098954338
+          },
+          "final_train_step_time_ms": {
+            "mean": 54.69759895067945,
+            "std": 25.254112098723372
+          },
+          "final_train_throughput": {
+            "mean": 2898.9864870151673,
+            "std": 1821.9779576419085
+          },
+          "wall_time_sec": {
+            "mean": 753.3381823206679,
+            "std": 147.97030123026877
+          }
+        }
+      },
+      "curves": {
+        "train": {
+          "epoch": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "accuracy": [
+            0.9161757575757576,
+            0.9638545454545454,
+            0.9739030303030303,
+            0.9795636363636363,
+            0.9836363636363638
+          ],
+          "accuracy_std": [
+            0.0011091405850772607,
+            0.00017344349116673002,
+            0.001072778632566092,
+            0.0010431991482023036,
+            0.0001898237547074393
+          ],
+          "loss": [
+            0.28451297220967037,
+            0.12281358699473467,
+            0.0857676794131597,
+            0.06564573416782148,
+            0.05220382646791863
+          ],
+          "loss_std": [
+            0.004696123033628975,
+            0.0005901397871226665,
+            0.0020682167936276062,
+            0.001351020111665173,
+            0.0006392994823941819
+          ],
+          "step_time_ms": [
+            58.906883925322774,
+            75.99912175292367,
+            44.83154031458338,
+            54.421889195937716,
+            54.69759895067944
+          ],
+          "step_time_ms_std": [
+            19.51950466084263,
+            13.431082411196096,
+            25.497765902465552,
+            34.79156600320241,
+            25.254112098723372
+          ],
+          "throughput": [
+            2387.4190643156835,
+            1720.6772615680318,
+            3430.91048564523,
+            3802.6984873685474,
+            2898.9864870151673
+          ],
+          "throughput_std": [
+            978.2221323693193,
+            321.1507408311674,
+            1548.8578730763431,
+            3512.9390905872897,
+            1821.9779576419085
+          ],
+          "epoch_time_sec": [
+            151.8347052803389,
+            186.78823893166555,
+            122.52852015700289,
+            128.68905877400053,
+            137.32073818832578
+          ],
+          "epoch_time_sec_std": [
+            37.879492168617844,
+            22.935120902789304,
+            44.176951382737805,
+            64.56671589596688,
+            40.22227350771113
+          ]
+        },
+        "val": {
+          "epoch": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "accuracy": [
+            0.9564,
+            0.9701333333333334,
+            0.9747333333333333,
+            0.9772666666666666,
+            0.9757333333333333
+          ],
+          "accuracy_std": [
+            0.002615339366124409,
+            0.0017009801096231198,
+            0.0018036999011291808,
+            0.0017243356208503213,
+            0.0009018499505645904
+          ],
+          "loss": [
+            0.14302300682067873,
+            0.09952438600063324,
+            0.08470047082453967,
+            0.07559501101374626,
+            0.07580080071190994
+          ],
+          "loss_std": [
+            0.007785136971377061,
+            0.0018558779562029407,
+            0.005592362163842137,
+            0.00433782514109147,
+            0.0033603209614453036
+          ]
+        },
+        "test": {
+          "epoch": [
+            5
+          ],
+          "accuracy": [
+            0.9778666666666668
+          ],
+          "accuracy_std": [
+            0.0007505553499465418
+          ],
+          "loss": [
+            0.07170507951726517
+          ],
+          "loss_std": [
+            0.00375578098954338
+          ]
+        }
+      },
+      "param_count": {
+        "mean": 203530.0,
+        "std": 0.0
+      },
+      "wall_time_sec": {
+        "mean": 753.3381823206679,
+        "std": 147.97030123026877
+      },
+      "epoch_to_97": 2,
+      "data_info": {
+        "train_size": 55000,
+        "val_size": 5000,
+        "test_size": 10000,
+        "mean": 0.1307,
+        "std": 0.3081
+      },
+      "derived": {
+        "final_train_accuracy": 0.9836363636363638,
+        "generalization_gap": 0.005769696969697091,
+        "accuracy_per_wall_time": 0.0012980447422090513,
+        "accuracy_per_param": 4.804533320231252e-06,
+        "test_accuracy_std": 0.0007505553499465418,
+        "val_accuracy_std_max": 0.002615339366124409
+      }
+    },
+    "mlp-obl": {
+      "run_id": "20251229-mlp-obl-par",
+      "model": "mlp-obl",
+      "config": {
+        "run_id": "20251229-mlp-obl-par",
+        "model": "mlp-obl",
+        "epochs": 5,
+        "batch_size": 128,
+        "lr": 0.001,
+        "optimizer": "adam",
+        "momentum": 0.9,
+        "weight_decay": 0.0,
+        "seeds": [
+          1,
+          2,
+          3
+        ],
+        "data_seed": 123,
+        "val_size": 5000,
+        "num_workers": 0,
+        "num_threads": 2,
+        "device": "cpu",
+        "beta_l1": 0.0,
+        "operator_dropout": 0.0,
+        "gamma": 0.1,
+        "beta_init": 0.01,
+        "hidden_dim": 256,
+        "cnn_hidden_dim": 128,
+        "data_dir": "/home/asakura/randomops/project/data"
+      },
+      "env": {
+        "python": "3.12.10 (main, Jul 31 2025, 12:21:14) [GCC 13.3.0]",
+        "torch": "2.9.1+cu128",
+        "torch_config": "",
+        "torchvision": "0.24.1+cu128",
+        "device": "cpu",
+        "num_threads": 2,
+        "mkldnn": true,
+        "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+        "processor": "x86_64",
+        "cpu_count": 14,
+        "deterministic": true
+      },
+      "summary": {
+        "run_id": "20251229-mlp-obl-par",
+        "model": "mlp-obl",
+        "seeds": [
+          {
+            "seed": 1,
+            "param_count": 532522,
+            "best_val_accuracy": 0.978,
+            "test_loss": 0.06938188168630004,
+            "test_accuracy": 0.9779,
+            "wall_time_sec": 1245.6249535529932,
+            "final_train_step_time_ms": 352.8859823762768,
+            "final_train_throughput": 362.4566821601804,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          },
+          {
+            "seed": 2,
+            "param_count": 532522,
+            "best_val_accuracy": 0.9782,
+            "test_loss": 0.06627281534224749,
+            "test_accuracy": 0.9794,
+            "wall_time_sec": 1300.254855334002,
+            "final_train_step_time_ms": 131.56117927091307,
+            "final_train_throughput": 972.2159915392303,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          },
+          {
+            "seed": 3,
+            "param_count": 532522,
+            "best_val_accuracy": 0.9808,
+            "test_loss": 0.06349852518280968,
+            "test_accuracy": 0.9803,
+            "wall_time_sec": 421.96047333099705,
+            "final_train_step_time_ms": 76.30592022601323,
+            "final_train_throughput": 1676.224884964262,
+            "data_info": {
+              "train_size": 55000,
+              "val_size": 5000,
+              "test_size": 10000,
+              "mean": 0.1307,
+              "std": 0.3081
+            }
+          }
+        ],
+        "aggregate": {
+          "test_accuracy": {
+            "mean": 0.9792,
+            "std": 0.0012124355652981995
+          },
+          "test_loss": {
+            "mean": 0.06638440740378573,
+            "std": 0.002943265283310243
+          },
+          "final_train_step_time_ms": {
+            "mean": 186.91769395773437,
+            "std": 146.36389747292571
+          },
+          "final_train_throughput": {
+            "mean": 1003.6325195545576,
+            "std": 657.4473145044932
+          },
+          "wall_time_sec": {
+            "mean": 989.2800940726642,
+            "std": 492.0719160864623
+          }
+        }
+      },
+      "curves": {
+        "train": {
+          "epoch": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "accuracy": [
+            0.9184363636363636,
+            0.9668787878787879,
+            0.9763636363636362,
+            0.9820363636363636,
+            0.9855333333333333
+          ],
+          "accuracy_std": [
+            0.0007919011541957612,
+            0.0007528092474760359,
+            0.0004329411236287569,
+            0.0007741697765834032,
+            0.001029375696754548
+          ],
+          "loss": [
+            0.2771629092272484,
+            0.11042602978366794,
+            0.07536126148050482,
+            0.05594820341910376,
+            0.044780417539676036
+          ],
+          "loss_std": [
+            0.0024847434256800036,
+            0.0022004871273213146,
+            0.0017152104526036351,
+            0.001209062499892733,
+            0.00246026695283898
+          ],
+          "step_time_ms": [
+            334.44021459776155,
+            270.4631514046067,
+            290.00915611304305,
+            185.48751066276785,
+            186.91769395773437
+          ],
+          "step_time_ms_std": [
+            203.45018870479979,
+            229.4728741426546,
+            181.77935446730743,
+            113.75153678366534,
+            146.36389747292571
+          ],
+          "throughput": [
+            603.101872998048,
+            718.2692466048996,
+            607.4537853066445,
+            886.5657349236262,
+            1003.6325195545575
+          ],
+          "throughput_std": [
+            549.4200738466965,
+            454.94477959891,
+            426.7829474896443,
+            510.9679114851395,
+            657.4473145044932
+          ],
+          "epoch_time_sec": [
+            258.85956289633276,
+            206.11866697066094,
+            215.1070876546631,
+            147.40088966433055,
+            146.42333853099748
+          ],
+          "epoch_time_sec_std": [
+            146.44624066288253,
+            156.83502519271394,
+            122.52367504119684,
+            84.33644036134592,
+            111.01215951602269
+          ]
+        },
+        "val": {
+          "epoch": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "accuracy": [
+            0.9585333333333333,
+            0.9725333333333334,
+            0.9753333333333334,
+            0.9769333333333333,
+            0.9788666666666667
+          ],
+          "accuracy_std": [
+            0.0014742229591664245,
+            0.0013316656236958542,
+            0.00213853532431272,
+            0.0009451631252505232,
+            0.0017009801096230786
+          ],
+          "loss": [
+            0.13716826602617901,
+            0.08856229374855758,
+            0.083831183950603,
+            0.07162446001196901,
+            0.06829723748123895
+          ],
+          "loss_std": [
+            0.0037293017543576904,
+            0.0068819062061853025,
+            0.010012921583282831,
+            0.003391953835992521,
+            0.0053753612924934534
+          ]
+        },
+        "test": {
+          "epoch": [
+            5
+          ],
+          "accuracy": [
+            0.9792
+          ],
+          "accuracy_std": [
+            0.0012124355652981997
+          ],
+          "loss": [
+            0.06638440740378575
+          ],
+          "loss_std": [
+            0.002943265283310243
+          ]
+        }
+      },
+      "param_count": {
+        "mean": 532522.0,
+        "std": 0.0
+      },
+      "wall_time_sec": {
+        "mean": 989.2800940726642,
+        "std": 492.0719160864623
+      },
+      "epoch_to_97": 2,
+      "data_info": {
+        "train_size": 55000,
+        "val_size": 5000,
+        "test_size": 10000,
+        "mean": 0.1307,
+        "std": 0.3081
+      },
+      "derived": {
+        "final_train_accuracy": 0.9855333333333333,
+        "generalization_gap": 0.006333333333333302,
+        "accuracy_per_wall_time": 0.0009898106773470327,
+        "accuracy_per_param": 1.8387972703475161e-06,
+        "test_accuracy_std": 0.0012124355652981995,
+        "val_accuracy_std_max": 0.00213853532431272
+      }
+    }
+  },
+  "comparisons": {
+    "mlp": {
+      "test_accuracy_delta": 0.0013333333333332975,
+      "step_time_delta_pct": 241.72924871213652,
+      "wall_time_delta_pct": 31.319521204298205,
+      "param_delta_pct": 161.6430010317889,
+      "param_ratio": 2.6164300103178895
+    },
+    "cnn": {
+      "test_accuracy_delta": -0.0022000000000000908,
+      "step_time_delta_pct": 4.675373911928515,
+      "wall_time_delta_pct": 3.487736683595602,
+      "param_delta_pct": 19.588181443025128,
+      "param_ratio": 1.1958818144302512
+    }
+  },
+  "insights": [
+    "MLP accuracy delta (OBL - baseline): 0.13 pp",
+    "MLP step time delta: 241.7%",
+    "MLP wall time delta: 31.3%",
+    "MLP param delta: 161.6%",
+    "CNN accuracy delta (OBL - baseline): -0.22 pp",
+    "CNN step time delta: 4.7%",
+    "CNN wall time delta: 3.5%",
+    "CNN param delta: 19.6%",
+    "cnn generalization gap (train - test): 0.15 pp",
+    "cnn test accuracy std: 0.15 pp",
+    "cnn-obl generalization gap (train - test): 0.33 pp",
+    "cnn-obl test accuracy std: 0.09 pp",
+    "mlp generalization gap (train - test): 0.58 pp",
+    "mlp test accuracy std: 0.08 pp",
+    "mlp-obl generalization gap (train - test): 0.63 pp",
+    "mlp-obl test accuracy std: 0.12 pp",
+    "Best accuracy per wall-time: mlp"
+  ],
+  "analysis_sections": [
+    {
+      "title": "Accuracy & Guardrail",
+      "items": [
+        "cnn: 99.15% (+/- 0.15 pp) [pass]",
+        "cnn-obl: 98.93% (+/- 0.09 pp) [pass]",
+        "mlp: 97.79% (+/- 0.08 pp) [pass]",
+        "mlp-obl: 97.92% (+/- 0.12 pp) [pass]"
+      ]
+    },
+    {
+      "title": "Efficiency vs Baseline",
+      "items": [
+        "mlp step time delta: 241.7%",
+        "mlp wall time delta: 31.3%",
+        "mlp parameter delta: 161.6%",
+        "cnn step time delta: 4.7%",
+        "cnn wall time delta: 3.5%",
+        "cnn parameter delta: 19.6%"
+      ]
+    },
+    {
+      "title": "Stability Across Seeds",
+      "items": [
+        "cnn: test std 0.15 pp, max val std 0.24 pp",
+        "cnn-obl: test std 0.09 pp, max val std 0.27 pp",
+        "mlp: test std 0.08 pp, max val std 0.26 pp",
+        "mlp-obl: test std 0.12 pp, max val std 0.21 pp"
+      ]
+    },
+    {
+      "title": "Convergence Speed",
+      "items": [
+        "cnn: reaches 97.0% at epoch 1",
+        "cnn-obl: reaches 97.0% at epoch 1",
+        "mlp: reaches 97.0% at epoch 2",
+        "mlp-obl: reaches 97.0% at epoch 2"
+      ]
+    },
+    {
+      "title": "Comparability Check",
+      "items": [
+        "mlp: param ratio 2.62 (+161.6%), consider rebalancing",
+        "cnn: param ratio 1.20 (+19.6%), consider rebalancing"
+      ]
+    }
+  ],
+  "guardrail": 0.97,
+  "dataset": {
+    "train_size": 55000,
+    "val_size": 5000,
+    "test_size": 10000,
+    "mean": 0.1307,
+    "std": 0.3081
+  }
+}

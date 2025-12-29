@@ -1,0 +1,699 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+codex-second-agent: Codex CLI を「セッションID自動保持付き」で呼び出すラッパー
+
+使い方:
+  codex-second-agent [--agent NAME] "プロンプト..."
+  codex-second-agent -                 # プロンプトをstdinから読む
+  codex-second-agent workspace init PATH   # サブエージェント実行対象のworkspace（=git repo root）を保存
+  codex-second-agent workspace show        # 保存済みworkspaceを表示
+  codex-second-agent workspace clear       # 保存済みworkspaceを削除
+  codex-second-agent agents            # エージェント一覧
+  codex-second-agent status [--verbose] # 現在エージェントの保存セッションID（と各種パス）を表示
+  codex-second-agent paths             # 各種ディレクトリ（state/log/worktree等）の場所を表示
+  codex-second-agent doctor            # 環境/パス/設定の簡易診断（トラブル切り分け）
+  codex-second-agent reset             # 現在エージェントのセッションIDを削除（次回は新規セッション）
+  codex-second-agent worktree create NAME  # エージェント用worktree作成
+  codex-second-agent worktree list         # worktree一覧（エージェント名/パス）
+  codex-second-agent worktree remove NAME  # エージェント用worktreeを削除（必要ならブランチも）
+
+オプション:
+  --agent NAME         エージェント名（セッション/ログ/作業ディレクトリを分離）
+  --auto-worktree      エージェント用worktreeを自動作成してそこで実行する
+  --no-auto-worktree   自動worktree作成を無効化する
+  --raw-json          codexのJSONLイベントをそのまま出力（デバッグ用）
+  --post-git-status   実行後に `git status --porcelain` を要約表示する（未コミット滞留の検知）
+  --worktrees-in-workspace worktreeをworkspace配下（.codex-worktrees）に作成する
+  --workspace PATH    実行対象workspace（git repo）を一時的に指定（保存しない）
+  --                 以降は codex exec にそのまま渡す（例: --model o3 --sandbox read-only）
+
+環境変数:
+  CODEX_SA_STATE_DIR  セッションID保存先（デフォルト: <repo>/.codex-second-agent）
+  CODEX_SA_AGENT      既定のエージェント名（デフォルト: default）
+  CODEX_SA_AUTO_WORKTREE  worktree自動作成（未指定なら default=off / 非default=on）
+  CODEX_SA_WORKTREES_DIR  worktreeの保存先（デフォルト: <state>/worktrees）
+  CODEX_SA_LOG_DIR    ログ保存先（デフォルト: <state>/agents/<agent>/logs）
+  CODEX_SA_WORKTREES_MODE worktreeの配置モード（workspace|state）。未指定は state
+  CODEX_SA_POST_GIT_STATUS 実行後にgit status要約を出す（0|1、既定0）
+  CODEX_SA_TARGET_WORKSPACE 保存済みworkspaceを上書きする（デバッグ用、通常は workspace init を使う）
+
+例:
+  codex-second-agent "このリポジトリのREADMEを要約して"
+  codex-second-agent --agent reviewer "この差分をレビューして"
+  codex-second-agent worktree create reviewer
+  codex-second-agent --agent reviewer "worktree上で作業して"
+  codex-second-agent status --verbose
+  codex-second-agent paths
+  codex-second-agent doctor
+  CODEX_SA_WORKTREES_MODE=workspace codex-second-agent paths
+  codex-second-agent --worktrees-in-workspace paths
+  codex-second-agent worktree remove reviewer
+  codex-second-agent worktree remove reviewer --keep-branch
+USAGE
+}
+
+raw_json=0
+agent_name="${CODEX_SA_AGENT:-default}"
+auto_worktree="${CODEX_SA_AUTO_WORKTREE:-}"
+worktrees_mode="${CODEX_SA_WORKTREES_MODE:-}"
+post_git_status="${CODEX_SA_POST_GIT_STATUS:-0}"
+workspace_override="${CODEX_SA_TARGET_WORKSPACE:-}"
+prompt_parts=()
+codex_args=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+    --agent)
+      agent_name="${2:-}"
+      if [[ -z "$agent_name" ]]; then
+        echo "error: --agent requires a value" >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    --agent=*)
+      agent_name="${1#--agent=}"
+      if [[ -z "$agent_name" ]]; then
+        echo "error: --agent requires a value" >&2
+        exit 2
+      fi
+      shift
+      ;;
+    --auto-worktree)
+      auto_worktree="1"
+      shift
+      ;;
+    --no-auto-worktree)
+      auto_worktree="0"
+      shift
+      ;;
+    --raw-json)
+      raw_json=1
+      shift
+      ;;
+    --post-git-status)
+      post_git_status="1"
+      shift
+      ;;
+    --worktrees-in-workspace)
+      worktrees_mode="workspace"
+      shift
+      ;;
+    --workspace)
+      workspace_override="${2:-}"
+      if [[ -z "$workspace_override" ]]; then
+        echo "error: --workspace requires a value" >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    --workspace=*)
+      workspace_override="${1#--workspace=}"
+      if [[ -z "$workspace_override" ]]; then
+        echo "error: --workspace requires a value" >&2
+        exit 2
+      fi
+      shift
+      ;;
+    --)
+      shift
+      codex_args+=("$@")
+      break
+      ;;
+    *)
+      prompt_parts+=("$1")
+      shift
+      ;;
+  esac
+done
+
+primary_cmd="${prompt_parts[0]:-}"
+sub_cmd="${prompt_parts[1]:-}"
+sub_arg="${prompt_parts[2]:-}"
+
+# 既定の保存先は「実行したリポジトリ内」にする（外部を汚さない）
+state_dir="${CODEX_SA_STATE_DIR:-}"
+# 常に使うモデル（ユーザー要望: gpt-5.2固定）
+forced_model="${CODEX_SA_MODEL:-gpt-5.2}"
+
+sanitize_codex_args() {
+  # `--` 以降で `--model/-m` を渡しても反映させない（事故防止: 常に forced_model を使用）
+  local -a in=("$@")
+  local -a out=()
+  local i=0
+  while [[ $i -lt ${#in[@]} ]]; do
+    local a="${in[$i]}"
+    case "$a" in
+      -m|--model)
+        i=$((i+2))
+        continue
+        ;;
+      --model=*)
+        i=$((i+1))
+        continue
+        ;;
+      *)
+        out+=("$a")
+        i=$((i+1))
+        ;;
+    esac
+  done
+  # 参照渡し: 呼び出し側の配列を上書き
+  codex_args=("${out[@]}")
+}
+
+sanitize_codex_args "${codex_args[@]}"
+
+# 「設定保存（workspace init）」を行う親側のコンテキスト（どこから起動しても一意になるように）
+control_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if [[ -z "$state_dir" ]]; then
+  state_dir="${control_root}/.codex-second-agent"
+fi
+mkdir -p "$state_dir"
+control_key="$(printf '%s' "$control_root" | sha256sum | awk '{print $1}')"
+control_state_dir="${state_dir}/${control_key}"
+control_config_dir="${control_state_dir}/config"
+target_workspace_file="${control_config_dir}/target_workspace_root"
+
+resolve_git_root() {
+  local path="${1:-}"
+  if [[ -z "$path" ]]; then
+    return 1
+  fi
+  git -C "$path" rev-parse --show-toplevel 2>/dev/null
+}
+
+if [[ "$primary_cmd" == "workspace" ]]; then
+  mkdir -p "$control_config_dir"
+  case "$sub_cmd" in
+    init)
+      if [[ -z "$sub_arg" ]]; then
+        echo "error: workspace init requires PATH" >&2
+        exit 2
+      fi
+      resolved="$(resolve_git_root "$sub_arg" || true)"
+      if [[ -z "$resolved" ]]; then
+        echo "error: not a git repository: $sub_arg" >&2
+        exit 2
+      fi
+      printf '%s\n' "$resolved" >"$target_workspace_file"
+      echo "$resolved"
+      exit 0
+      ;;
+    show)
+      if [[ -f "$target_workspace_file" ]]; then
+        cat "$target_workspace_file"
+        exit 0
+      fi
+      echo "(not configured)" >&2
+      exit 1
+      ;;
+    clear|reset)
+      rm -f "$target_workspace_file"
+      echo "cleared: target workspace for control root: $control_root" >&2
+      exit 0
+      ;;
+    *)
+      echo "error: workspace subcommand must be init|show|clear" >&2
+      exit 2
+      ;;
+  esac
+fi
+
+workspace_configured=0
+target_workspace_root=""
+if [[ -n "$workspace_override" ]]; then
+  target_workspace_root="$(resolve_git_root "$workspace_override" || true)"
+  if [[ -z "$target_workspace_root" ]]; then
+    echo "error: not a git repository: $workspace_override" >&2
+    exit 2
+  fi
+  workspace_configured=1
+elif [[ -f "$target_workspace_file" ]]; then
+  target_workspace_root="$(cat "$target_workspace_file" || true)"
+  if [[ -n "$target_workspace_root" ]]; then
+    workspace_configured=1
+  fi
+fi
+
+# 実行対象workspace（worktree/ログ/stateの基準）: 明示指定 or 保存済み or その場のgit root
+workspace_root="${target_workspace_root:-$control_root}"
+
+# サブエージェントは必ず target workspace を設定してから使う（事故防止）
+if [[ "$agent_name" != "default" ]]; then
+  if [[ $workspace_configured -ne 1 ]]; then
+    case "$primary_cmd" in
+      agents|status|paths|doctor|reset|worktree|workspace)
+        # 管理系コマンドは許可（設定前でも状態確認できるようにする）
+        ;;
+      *)
+        echo "error: target workspace is not configured for sub-agent '$agent_name'." >&2
+        echo "hint: run 'codex-second-agent workspace init <path-to-project-git>' or pass '--workspace <path>'." >&2
+        exit 2
+        ;;
+    esac
+  fi
+fi
+
+workspace_key="$(printf '%s' "$workspace_root" | sha256sum | awk '{print $1}')"
+workspace_state_dir="${state_dir}/${workspace_key}"
+agents_root="${workspace_state_dir}/agents"
+agent_state_dir="${agents_root}/${agent_name}"
+session_file="${agent_state_dir}/session_id"
+
+# 会話ログ保存先（メイン→サブ / サブ→メイン）
+logs_dir="${CODEX_SA_LOG_DIR:-${agent_state_dir}/logs}"
+events_log="${logs_dir}/events.jsonl"
+transcript_log="${logs_dir}/transcript.jsonl"
+
+chmod 700 "$state_dir" 2>/dev/null || true
+
+if [[ -n "${CODEX_SA_WORKTREES_DIR:-}" ]]; then
+  worktrees_dir="${CODEX_SA_WORKTREES_DIR}"
+else
+  if [[ "$worktrees_mode" == "workspace" ]]; then
+    worktrees_dir="${workspace_root}/.codex-worktrees"
+  else
+    worktrees_dir="${workspace_state_dir}/worktrees"
+  fi
+fi
+agent_worktree="${worktrees_dir}/${agent_name}"
+
+ensure_agent_dirs() {
+  mkdir -p "$(dirname "$session_file")" "$logs_dir"
+}
+
+ensure_worktree() {
+  # 非defaultエージェントは「基本 worktree で隔離して開発」する運用を想定し、
+  # 何も指定が無ければ自動で worktree を作る（ユーザーが明示的に無効化可能）。
+  if [[ -z "$auto_worktree" ]]; then
+    if [[ "$agent_name" == "default" ]]; then
+      auto_worktree="0"
+    else
+      auto_worktree="1"
+    fi
+  fi
+
+  if [[ "$auto_worktree" != "1" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$worktrees_dir"
+  if [[ -d "$agent_worktree" ]]; then
+    return 0
+  fi
+
+  # git repoでなければ作れない
+  if ! git -C "$workspace_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+
+  branch="agent/${agent_name}"
+  if git -C "$workspace_root" show-ref --verify --quiet "refs/heads/${branch}"; then
+    git -C "$workspace_root" worktree add "$agent_worktree" "$branch" >/dev/null
+  else
+    git -C "$workspace_root" worktree add -b "$branch" "$agent_worktree" >/dev/null
+  fi
+}
+
+has_cd_arg=0
+for a in "${codex_args[@]}"; do
+  case "$a" in
+    -C|--cd|--cd=*)
+      has_cd_arg=1
+      break
+      ;;
+  esac
+done
+
+ensure_worktree
+
+# `--cd project` のような相対パス指定は、worktree隔離を壊しやすい。
+# worktreeがある場合は「worktree配下の相対パス」として解釈して絶対パスに補正する。
+rewrite_relative_cd_to_worktree() {
+  [[ -d "$agent_worktree" ]] || return 0
+
+  local -a out=()
+  local i=0
+  while [[ $i -lt ${#codex_args[@]} ]]; do
+    local a="${codex_args[$i]}"
+    case "$a" in
+      -C|--cd)
+        local v="${codex_args[$((i+1))]:-}"
+        if [[ -n "$v" && "$v" != /* && "$v" != "~"* ]]; then
+          out+=("$a" "${agent_worktree}/${v}")
+          i=$((i+2))
+          continue
+        fi
+        out+=("$a" "$v")
+        i=$((i+2))
+        continue
+        ;;
+      --cd=*)
+        local v="${a#--cd=}"
+        if [[ -n "$v" && "$v" != /* && "$v" != "~"* ]]; then
+          out+=("--cd=${agent_worktree}/${v}")
+        else
+          out+=("$a")
+        fi
+        i=$((i+1))
+        continue
+        ;;
+      *)
+        out+=("$a")
+        i=$((i+1))
+        continue
+        ;;
+    esac
+  done
+  codex_args=("${out[@]}")
+}
+
+if [[ $has_cd_arg -ne 0 ]]; then
+  rewrite_relative_cd_to_worktree
+fi
+
+if [[ $has_cd_arg -eq 0 && -d "$agent_worktree" ]]; then
+  codex_args=(--cd "$agent_worktree" "${codex_args[@]}")
+fi
+
+list_agents() {
+  mkdir -p "$agents_root" "$worktrees_dir"
+  declare -A seen
+  for d in "$agents_root"/*; do
+    [[ -d "$d" ]] || continue
+    seen["$(basename "$d")"]=1
+  done
+  for d in "$worktrees_dir"/*; do
+    [[ -d "$d" ]] || continue
+    seen["$(basename "$d")"]=1
+  done
+  for k in "${!seen[@]}"; do
+    printf '%s\n' "$k"
+  done | sort
+}
+
+if [[ "$primary_cmd" == "agents" ]]; then
+  list_agents
+  exit 0
+fi
+
+if [[ "$primary_cmd" == "worktree" ]]; then
+  case "$sub_cmd" in
+    create)
+      name="$sub_arg"
+      if [[ -z "$name" ]]; then
+        echo "error: worktree create requires NAME" >&2
+        exit 2
+      fi
+      mkdir -p "$worktrees_dir"
+      wt="${worktrees_dir}/${name}"
+      if [[ -e "$wt" ]]; then
+        echo "error: worktree path already exists: $wt" >&2
+        exit 1
+      fi
+      branch="agent/${name}"
+      if git -C "$workspace_root" show-ref --verify --quiet "refs/heads/${branch}"; then
+        git -C "$workspace_root" worktree add "$wt" "$branch"
+      else
+        git -C "$workspace_root" worktree add -b "$branch" "$wt"
+      fi
+      echo "$name	$wt"
+      exit 0
+      ;;
+    list)
+      mkdir -p "$worktrees_dir"
+      for d in "$worktrees_dir"/*; do
+        [[ -d "$d" ]] || continue
+        echo "$(basename "$d")	$d"
+      done
+      exit 0
+      ;;
+    remove|rm|delete)
+      name="$sub_arg"
+      if [[ -z "$name" ]]; then
+        echo "error: worktree remove requires NAME" >&2
+        exit 2
+      fi
+      keep_branch=0
+      # 追加オプション（厳密なパーサは要らないので最小限）
+      for extra in "${prompt_parts[@]:3}"; do
+        case "$extra" in
+          --keep-branch)
+            keep_branch=1
+            ;;
+        esac
+      done
+      mkdir -p "$worktrees_dir"
+      wt="${worktrees_dir}/${name}"
+      if [[ ! -e "$wt" ]]; then
+        echo "error: worktree path does not exist: $wt" >&2
+        exit 1
+      fi
+      # 事故防止: workspace_root 自体は絶対に消さない
+      if [[ "$wt" == "$workspace_root" ]]; then
+        echo "error: refusing to remove workspace root: $wt" >&2
+        exit 2
+      fi
+      # git repoでなければ worktree remove はできない。ここでは安全のため削除しない。
+      if ! git -C "$workspace_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "error: not a git repository; refusing to remove: $wt" >&2
+        exit 2
+      fi
+      # worktreeをGit経由で削除（ディレクトリも消える）
+      if ! git -C "$workspace_root" worktree remove --force "$wt" >/dev/null 2>&1; then
+        echo "error: failed to remove git worktree: $wt" >&2
+        exit 1
+      fi
+      # 念のためディレクトリが残っていれば消す（これも失敗したらエラーにする）
+      if [[ -e "$wt" ]]; then
+        rm -rf "$wt"
+      fi
+      if [[ -e "$wt" ]]; then
+        echo "error: worktree path still exists after removal: $wt" >&2
+        exit 1
+      fi
+      # ブランチも消す（必要なら keep）
+      if [[ $keep_branch -eq 0 ]]; then
+        branch="agent/${name}"
+        git -C "$workspace_root" branch -D "$branch" >/dev/null 2>&1 || true
+      fi
+      echo "$name	$wt"
+      exit 0
+      ;;
+    *)
+      echo "error: worktree subcommand must be create|list|remove" >&2
+      exit 2
+      ;;
+  esac
+fi
+
+if [[ "$primary_cmd" == "status" ]]; then
+  if [[ "$sub_cmd" == "--verbose" || "$sub_cmd" == "verbose" ]]; then
+    echo "agent_name: $agent_name"
+    echo "workspace_root: $workspace_root"
+    echo "state_dir: $state_dir"
+    echo "workspace_state_dir: $workspace_state_dir"
+    echo "agent_state_dir: $agent_state_dir"
+    echo "logs_dir: $logs_dir"
+    echo "worktrees_dir: $worktrees_dir"
+    echo "agent_worktree: $agent_worktree"
+    echo -n "session_id: "
+    if [[ -f "$session_file" ]]; then
+      cat "$session_file"
+    else
+      echo "(no session)"
+    fi
+    exit 0
+  fi
+  if [[ -f "$session_file" ]]; then
+    cat "$session_file"
+    exit 0
+  fi
+  echo "(no session)" >&2
+  exit 1
+fi
+
+if [[ "$primary_cmd" == "paths" ]]; then
+  echo "agent_name: $agent_name"
+  echo "control_root: $control_root"
+  echo "workspace_root: $workspace_root"
+  echo "workspace_configured: $( [[ $workspace_configured -eq 1 ]] && echo yes || echo no )"
+  echo "state_dir: $state_dir"
+  echo "workspace_state_dir: $workspace_state_dir"
+  echo "agents_root: $agents_root"
+  echo "agent_state_dir: $agent_state_dir"
+  echo "logs_dir: $logs_dir"
+  echo "worktrees_dir: $worktrees_dir"
+  echo "agent_worktree: $agent_worktree"
+  # `effective_cd` は codex exec の実行ディレクトリとして使われる（--cd 指定が優先）。
+  effective_cd="$workspace_root"
+  i=0
+  while [[ $i -lt ${#codex_args[@]} ]]; do
+    a="${codex_args[$i]}"
+    case "$a" in
+      -C|--cd)
+        v="${codex_args[$((i+1))]:-}"
+        if [[ -n "$v" ]]; then
+          effective_cd="$v"
+          break
+        fi
+        ;;
+      --cd=*)
+        effective_cd="${a#--cd=}"
+        break
+        ;;
+    esac
+    i=$((i+1))
+  done
+  if [[ "$effective_cd" == "$workspace_root" && -d "$agent_worktree" ]]; then
+    effective_cd="$agent_worktree"
+  fi
+  echo "effective_cd: $effective_cd"
+  exit 0
+fi
+
+if [[ "$primary_cmd" == "doctor" ]]; then
+  echo "codex-second-agent doctor"
+  echo "agent_name: $agent_name"
+  echo "control_root: $control_root"
+  echo "workspace_root: $workspace_root"
+  echo "workspace_configured: $( [[ $workspace_configured -eq 1 ]] && echo yes || echo no )"
+  echo "in_git_repo: $(git -C "$workspace_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 && echo yes || echo no)"
+  echo "codex_in_path: $(command -v codex >/dev/null 2>&1 && echo yes || echo no)"
+  if command -v codex >/dev/null 2>&1; then
+    echo "codex_path: $(command -v codex)"
+    echo "codex_version: $(codex --version 2>/dev/null || echo unknown)"
+  fi
+  echo "state_dir: $state_dir"
+  echo "workspace_state_dir: $workspace_state_dir"
+  echo "logs_dir: $logs_dir"
+  echo "worktrees_mode: ${worktrees_mode:-state}"
+  echo "worktrees_dir: $worktrees_dir"
+  echo "agent_worktree: $agent_worktree"
+  echo -n "session_id: "
+  if [[ -f "$session_file" ]]; then
+    cat "$session_file"
+  else
+    echo "(no session)"
+  fi
+  exit 0
+fi
+
+if [[ "$primary_cmd" == "reset" ]]; then
+  rm -f "$session_file"
+  echo "reset: removed session_id for agent '${agent_name}' in workspace: $workspace_root" >&2
+  exit 0
+fi
+
+prompt="${prompt_parts[*]:-}"
+
+if [[ -z "$prompt" || "$primary_cmd" == "-" ]]; then
+  # stdin からプロンプト（Cursorエージェントは heredoc/パイプで渡せる）
+  prompt="$(cat)"
+fi
+
+if [[ -z "${prompt//[[:space:]]/}" ]]; then
+  echo "error: prompt is empty" >&2
+  usage >&2
+  exit 2
+fi
+
+session_id=""
+if [[ -f "$session_file" ]]; then
+  session_id="$(cat "$session_file" || true)"
+fi
+
+extract_effective_cd() {
+  local i=0
+  while [[ $i -lt ${#codex_args[@]} ]]; do
+    local a="${codex_args[$i]}"
+    case "$a" in
+      -C|--cd)
+        local v="${codex_args[$((i+1))]:-}"
+        if [[ -n "$v" ]]; then
+          printf '%s' "$v"
+          return 0
+        fi
+        ;;
+      --cd=*)
+        printf '%s' "${a#--cd=}"
+        return 0
+        ;;
+    esac
+    i=$((i+1))
+  done
+  if [[ -d "$agent_worktree" ]]; then
+    printf '%s' "$agent_worktree"
+    return 0
+  fi
+  printf '%s' "$workspace_root"
+}
+
+run_codex() {
+  if [[ -n "$session_id" ]]; then
+    # NOTE:
+    # - `--search` はトップレベルオプションなので `codex --search exec ...` の形で付与
+    # - `--dangerously-bypass-approvals-and-sandbox` は常に有効化（ユーザー要求）
+    # - `--json` は `codex exec` のオプションなので `exec` の後に置く
+    codex --dangerously-bypass-approvals-and-sandbox --search --model "$forced_model" exec "${codex_args[@]}" --json resume "$session_id" "$prompt"
+  else
+    codex --dangerously-bypass-approvals-and-sandbox --search --model "$forced_model" exec "${codex_args[@]}" --json "$prompt"
+  fi
+}
+
+print_post_git_status_summary() {
+  if [[ "$post_git_status" != "1" ]]; then
+    return 0
+  fi
+  if ! git -C "$effective_cd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+  local out
+  out="$(git -C "$effective_cd" status --porcelain=v1 2>/dev/null || true)"
+  if [[ -z "$out" ]]; then
+    return 0
+  fi
+  echo "post-git-status: uncommitted changes detected in: $effective_cd" >&2
+  # 大量出力を避ける（先頭だけ）
+  echo "$out" | sed -n '1,50p' >&2
+  if [[ $(echo "$out" | wc -l | tr -d ' ') -gt 50 ]]; then
+    echo "(truncated)" >&2
+  fi
+  echo "hint: git status -sb && git add -A && git commit" >&2
+}
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+filter_py="${script_dir}/codex-second-agent-filter.py"
+
+# Dockerfile経由で /usr/local/bin に入ると filter が同階層にいないので /usr/local/lib も見る
+if [[ ! -f "$filter_py" && -f "/usr/local/lib/codex-second-agent/filter.py" ]]; then
+  filter_py="/usr/local/lib/codex-second-agent/filter.py"
+fi
+
+prompt_tmp="$(mktemp -t codex-second-agent-prompt.XXXXXX)"
+cleanup() {
+  rm -f "$prompt_tmp"
+}
+trap cleanup EXIT
+printf '%s' "$prompt" >"$prompt_tmp"
+effective_cd="$(extract_effective_cd)"
+ensure_agent_dirs
+
+# - events.jsonl: codexのJSONLイベントをそのまま追記
+# - transcript.jsonl: 1リクエスト=1行で、prompt/responseをまとめて追記
+set +e
+run_codex | tee -a "$events_log" | python3 "$filter_py" "$session_file" "$raw_json" "$prompt_tmp" "$transcript_log" "$agent_name" "$effective_cd"
+rc=$?
+set -e
+print_post_git_status_summary || true
+exit $rc
+
+

@@ -1,0 +1,10 @@
+.codex/
+.config/
+.devcontainer/
+.codex-worktrees/
+.codex-second-agent/
+__pycache__/
+*.pyc
+project/runs/
+!project/runs/.gitkeep
+project/data/

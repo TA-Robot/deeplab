@@ -1,0 +1,136 @@
+# Runbook（管理者が整備する）
+
+このドキュメントは、管理者が「運用が詰まらないように」最低限の手順を集約する場所です。
+
+## セットアップ
+
+- Python 仮想環境を作成し、CPU版 PyTorch を導入:
+
+```bash
+cd project
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cpu
+```
+
+- データ格納先は `project/data/`（自動で作成されます）
+- 実験ログは `project/runs/` 配下に保存されます
+
+## 実行
+
+### 1) MLP ベースライン
+
+```bash
+cd project
+python run_mnist_experiment.py \
+  --model mlp \
+  --seeds 1,2,3 \
+  --epochs 5 \
+  --batch-size 128 \
+  --num-threads 8 \
+  --deterministic \
+  --run-id 20251229-mlp-baseline
+```
+
+### 2) MLP + Operator Basis Layer (K=32)
+
+```bash
+cd project
+python run_mnist_experiment.py \
+  --model mlp-obl \
+  --seeds 1,2,3 \
+  --epochs 5 \
+  --batch-size 128 \
+  --num-threads 8 \
+  --deterministic \
+  --obl-profile full \
+  --gamma 0.1 \
+  --beta-init 0.01 \
+  --run-id 20251229-mlp-obl
+```
+
+### 3) CNN ベースライン
+
+```bash
+cd project
+python run_mnist_experiment.py \
+  --model cnn \
+  --seeds 1,2,3 \
+  --epochs 5 \
+  --batch-size 128 \
+  --num-threads 8 \
+  --deterministic \
+  --run-id 20251229-cnn-baseline
+```
+
+### 4) CNN + Operator Basis Layer (K=32)
+
+```bash
+cd project
+python run_mnist_experiment.py \
+  --model cnn-obl \
+  --seeds 1,2,3 \
+  --epochs 5 \
+  --batch-size 128 \
+  --num-threads 8 \
+  --deterministic \
+  --obl-profile full \
+  --gamma 0.1 \
+  --beta-init 0.01 \
+  --run-id 20251229-cnn-obl
+```
+
+補足:
+- デフォルトの隠れ層構成:
+  - MLP: 2 hidden layers (256, 256)
+  - CNN: 2 fc layers (256, 128)
+- `--beta-l1 1e-4` を付けると演算子寄与のスパース化を促進できます
+- `--operator-dropout 0.1` は計算削減や正則化を試したい時に追加
+- `--num-threads` は環境の CPU コア数に合わせて調整
+- パラメータ数の差が大きい場合は `--hidden-dim` / `--cnn-hidden-dim` を調整して再実行
+- 出力: `config.json`, `env.json`, `metrics.jsonl`, `summary.json` が `project/runs/<run-id>/` に生成
+  - より細かい指定は `--mlp-hidden-dims` / `--cnn-fc-dims` を使う
+  - OBL は `--obl-profile full` がデフォルト（`mini` で軽量化）
+  - ランダムプログラム数は `--obl-programs` で上書き可能
+  - 正規化は `--obl-norm layernorm|rmsnorm`
+  - 乱数固定は `--obl-seed <int>` を使用
+  - 実装の詳細は `project/docs/obl-implementation.md` を参照
+
+### バックグラウンド並列（例）
+
+```bash
+cd project
+mkdir -p runs/logs
+nohup python run_mnist_experiment.py --model mlp --seeds 1,2,3 --epochs 5 --batch-size 128 --num-threads 2 --deterministic --device cpu --run-id 20251229-mlp-baseline-par > runs/logs/20251229-mlp-baseline-par.out 2>&1 &
+nohup python run_mnist_experiment.py --model mlp-obl --seeds 1,2,3 --epochs 5 --batch-size 128 --num-threads 2 --deterministic --device cpu --obl-profile full --gamma 0.1 --beta-init 0.01 --run-id 20251229-mlp-obl-par > runs/logs/20251229-mlp-obl-par.out 2>&1 &
+nohup python run_mnist_experiment.py --model cnn --seeds 1,2,3 --epochs 5 --batch-size 128 --num-threads 2 --deterministic --device cpu --run-id 20251229-cnn-baseline-par > runs/logs/20251229-cnn-baseline-par.out 2>&1 &
+nohup python run_mnist_experiment.py --model cnn-obl --seeds 1,2,3 --epochs 5 --batch-size 128 --num-threads 2 --deterministic --device cpu --obl-profile full --gamma 0.1 --beta-init 0.01 --run-id 20251229-cnn-obl-par > runs/logs/20251229-cnn-obl-par.out 2>&1 &
+```
+
+## テスト
+
+- スモークテスト（1エポックで動作確認）:
+
+```bash
+cd project
+python run_mnist_experiment.py --model mlp --epochs 1 --batch-size 64 --run-id smoke-mlp
+```
+
+## ダッシュボード
+
+レポート用 JSON を生成して、`project/dashboard/` で表示します。
+
+```bash
+cd project
+python scripts/build_report.py --runs-dir runs --output dashboard/data/report.json
+python -m http.server 8000 --directory dashboard
+```
+
+ブラウザで `http://localhost:8000` を開きます。
+
+## よくある詰まり
+
+- PyTorch が入らない: CPU wheel を明示
+  - `pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu`
+- `CUDA requested but not available`: `--device cpu` を指定する

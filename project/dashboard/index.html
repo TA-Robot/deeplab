@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ROS-ALTH MNIST Report</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true"></div>
+    <main class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">ROS-ALTH MNIST CPU Report</p>
+          <h1>Operator Basis Layer Evaluation</h1>
+          <p class="subtitle">
+            Single-screen dashboard with wall-time, learning curves, and multi-angle analysis across
+            MLP/CNN baselines and OBL variants.
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="meta-card">
+            <p class="meta-label">Generated</p>
+            <p id="generated-at" class="meta-value">-</p>
+          </div>
+          <div class="meta-card">
+            <p class="meta-label">Dataset</p>
+            <p id="dataset-info" class="meta-value">-</p>
+          </div>
+        </div>
+      </header>
+
+      <section class="section" id="status-section">
+        <div class="section-header">
+          <h2>Run Status</h2>
+          <p class="section-sub">Overview of available runs and config snapshots.</p>
+        </div>
+        <div id="run-cards" class="grid cards"></div>
+        <div class="panel env-panel">
+          <h3>Environment Snapshot</h3>
+          <div id="env-details" class="env-details"></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h2>Performance Snapshot</h2>
+          <p class="section-sub">Final accuracy, step time, and wall-time summaries.</p>
+        </div>
+        <div id="constraint-banner" class="banner"></div>
+        <div class="grid cards">
+          <div class="panel">
+            <h3>Scorecard</h3>
+            <div class="scorecard-wrapper">
+              <table id="scorecard" class="scorecard">
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th>Params</th>
+                    <th>Test Acc</th>
+                    <th>Step Time</th>
+                    <th>Wall Time</th>
+                    <th>Acc / Wall</th>
+                    <th>Guardrail</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Baseline vs OBL</h3>
+            <div id="delta-cards" class="delta-cards"></div>
+          </div>
+        </div>
+        <div class="grid charts">
+          <div class="panel">
+            <h3>OBL vs Baseline Delta</h3>
+            <canvas id="delta-chart"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Test Accuracy</h3>
+            <canvas id="accuracy-chart"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Step Time (ms)</h3>
+            <canvas id="step-time-chart"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Wall Time (sec)</h3>
+            <canvas id="wall-time-chart"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Variance (Test/Val)</h3>
+            <canvas id="variance-chart"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Accuracy vs Step Time</h3>
+            <canvas id="tradeoff-chart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h2>Learning Curves</h2>
+          <p class="section-sub">Mean train/val accuracy across seeds with epoch-level timing.</p>
+        </div>
+        <div class="grid charts">
+          <div class="panel">
+            <h3>MLP Accuracy</h3>
+            <canvas id="mlp-curve"></canvas>
+          </div>
+          <div class="panel">
+            <h3>CNN Accuracy</h3>
+            <canvas id="cnn-curve"></canvas>
+          </div>
+          <div class="panel">
+            <h3>MLP Loss</h3>
+            <canvas id="mlp-loss-curve"></canvas>
+          </div>
+          <div class="panel">
+            <h3>CNN Loss</h3>
+            <canvas id="cnn-loss-curve"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Epoch Wall Time</h3>
+            <canvas id="epoch-time-chart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h2>Analysis</h2>
+          <p class="section-sub">Automated findings plus manual interpretation notes.</p>
+        </div>
+        <div class="grid analysis">
+          <div class="panel">
+            <h3>Findings</h3>
+            <ul id="insights" class="insights"></ul>
+          </div>
+          <div class="panel">
+            <h3>Comparisons</h3>
+            <div id="comparisons" class="comparison-list"></div>
+          </div>
+          <div class="panel">
+            <h3>Derived Metrics</h3>
+            <div id="derived-metrics" class="derived-table"></div>
+          </div>
+          <div class="panel">
+            <h3>Multi-angle Review</h3>
+            <div id="analysis-sections" class="analysis-sections"></div>
+          </div>
+          <div class="panel">
+            <h3>Notes</h3>
+            <p class="note">
+              This report follows a fixed train/val/test split, three seeds, and CPU-only runs. No
+              hyperparameter tuning is performed on test metrics. If accuracy gaps are large,
+              adjust hidden sizes and rerun.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
