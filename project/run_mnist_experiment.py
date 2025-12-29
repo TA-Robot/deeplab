@@ -15,7 +15,7 @@ from pathlib import Path
 import torch
 import torchvision
 
-from src.data import DataConfig, get_mnist_loaders
+from src.data import DataConfig, get_dataset_loaders
 from src.models import CNNClassifier, CNNWithOBL, MLPClassifier, MLPWithOBL
 from src.operator_basis import OperatorBasisLayer, build_obl_config
 from src.train import count_parameters, evaluate, set_seed, train_one_epoch
@@ -25,7 +25,8 @@ MODEL_CHOICES = ("mlp", "cnn", "mlp-obl", "cnn-obl")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="MNIST CPU experiments for ROS-ALTH operator basis layer")
+    parser = argparse.ArgumentParser(description="Dataset experiments for ROS-ALTH operator basis layer")
+    parser.add_argument("--dataset", choices=("mnist", "fashion-mnist", "fashion_mnist", "cifar10"), default="mnist")
     parser.add_argument("--model", choices=MODEL_CHOICES, required=True)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=128)
@@ -81,21 +82,21 @@ def _build_obl_config(input_dim: int, args: argparse.Namespace) -> object:
     return build_obl_config(input_dim, profile=args.obl_profile, **overrides)
 
 
-def build_model(args: argparse.Namespace) -> torch.nn.Module:
+def build_model(args: argparse.Namespace, input_dim: int, input_shape: tuple[int, int, int]) -> torch.nn.Module:
     mlp_dims = _parse_dims(args.mlp_hidden_dims, args.hidden_dim, args.mlp_hidden_layers)
     cnn_dims = _parse_dims(args.cnn_fc_dims, args.cnn_hidden_dim, args.cnn_fc_layers)
 
     if args.model == "mlp":
-        return MLPClassifier(hidden_dims=mlp_dims)
+        return MLPClassifier(input_dim=input_dim, hidden_dims=mlp_dims)
     if args.model == "cnn":
-        return CNNClassifier(fc_dims=cnn_dims)
+        return CNNClassifier(input_shape=input_shape, fc_dims=cnn_dims)
 
     if args.model == "mlp-obl":
         obl_config = _build_obl_config(mlp_dims[0], args)
-        return MLPWithOBL(hidden_dims=mlp_dims, obl_config=obl_config)
+        return MLPWithOBL(input_dim=input_dim, hidden_dims=mlp_dims, obl_config=obl_config)
     if args.model == "cnn-obl":
         obl_config = _build_obl_config(cnn_dims[0], args)
-        return CNNWithOBL(fc_dims=cnn_dims, obl_config=obl_config)
+        return CNNWithOBL(input_shape=input_shape, fc_dims=cnn_dims, obl_config=obl_config)
 
     raise ValueError(f"unsupported model: {args.model}")
 
@@ -156,6 +157,7 @@ def main() -> int:
         val_size=args.val_size,
         num_workers=args.num_workers,
         seed=args.data_seed,
+        dataset=args.dataset,
     )
 
     torch_config = None
@@ -207,6 +209,7 @@ def main() -> int:
         "obl_seed": args.obl_seed,
         "obl_norm": args.obl_norm,
         "obl_programs": args.obl_programs,
+        "dataset": args.dataset,
         "data_dir": data_config.data_dir,
     }
 
@@ -224,9 +227,11 @@ def main() -> int:
 
     for seed in seeds:
         set_seed(seed, deterministic=args.deterministic)
-        train_loader, val_loader, test_loader, data_info = get_mnist_loaders(data_config)
+        train_loader, val_loader, test_loader, data_info = get_dataset_loaders(data_config)
 
-        model = build_model(args).to(device)
+        input_dim = int(data_info["channels"] * data_info["height"] * data_info["width"])
+        input_shape = (int(data_info["channels"]), int(data_info["height"]), int(data_info["width"]))
+        model = build_model(args, input_dim=input_dim, input_shape=input_shape).to(device)
         trainable_params = count_parameters(model)
         total_params = count_parameters(model, include_buffers=True)
 

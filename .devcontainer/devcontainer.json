@@ -1,0 +1,77 @@
+{
+  "name": "Cursor Dev Container",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  
+  // コンテナ設定
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  
+  // ユーザー設定
+  "remoteUser": "devuser",
+  
+  // 機能追加（必要に応じてコメントアウト解除）
+  "features": {
+    // Docker-in-Docker サポート
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    // Git設定
+    "ghcr.io/devcontainers/features/git:1": {},
+    // GitHub CLI
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  
+  // 拡張機能（Cursorで使いたい拡張機能を追加）
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "github.copilot"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  
+  // マウント設定（ホストの設定を引き継ぐ）
+  "mounts": [
+    // ホストのSSH鍵を共有（Git操作用）
+    "source=${localEnv:HOME}/.ssh,target=/home/devuser/.ssh,type=bind,readonly",
+    // ホストのGit設定を共有
+    "source=${localEnv:HOME}/.gitconfig,target=/home/devuser/.gitconfig,type=bind,readonly",
+    // Codex認証情報を共有
+    "source=${localEnv:HOME}/.codex,target=/home/devuser/.codex,type=bind",
+    // Gemini CLI設定を共有
+    "source=${localEnv:HOME}/.config/gemini,target=/home/devuser/.config/gemini,type=bind"
+  ],
+  
+  // 環境変数
+  "containerEnv": {
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "WAYLAND_DISPLAY": "${localEnv:WAYLAND_DISPLAY}",
+    // APIキー（ホストに設定されていれば引き継ぐ）
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
+    "GEMINI_API_KEY": "${localEnv:GEMINI_API_KEY}"
+  },
+  
+  // コンテナ作成後に実行するコマンド
+  "postCreateCommand": "echo '✅ Dev Container is ready!' && git --version && node --version 2>/dev/null || true",
+  
+  // 追加のrunArgs（必要に応じて調整）
+  "runArgs": [
+    "--init",
+    "--privileged"
+  ],
+  
+  // セキュリティオプション
+  "securityOpt": [
+    "seccomp=unconfined"
+  ]
+}
+

@@ -15,18 +15,66 @@ class DataConfig:
     val_size: int = 5000
     num_workers: int = 0
     seed: int = 42
+    dataset: str = "mnist"
 
 
-def get_mnist_loaders(config: DataConfig) -> Tuple[DataLoader, DataLoader, DataLoader, dict]:
+DATASET_REGISTRY = {
+    "mnist": {
+        "cls": datasets.MNIST,
+        "mean": (0.1307,),
+        "std": (0.3081,),
+        "channels": 1,
+        "size": 28,
+    },
+    "fashion-mnist": {
+        "cls": datasets.FashionMNIST,
+        "mean": (0.2860,),
+        "std": (0.3530,),
+        "channels": 1,
+        "size": 28,
+    },
+    "cifar10": {
+        "cls": datasets.CIFAR10,
+        "mean": (0.4914, 0.4822, 0.4465),
+        "std": (0.2470, 0.2435, 0.2616),
+        "channels": 3,
+        "size": 32,
+    },
+}
+
+
+def normalize_dataset_name(name: str) -> str:
+    lowered = name.lower().replace("_", "-")
+    if lowered == "fashionmnist":
+        lowered = "fashion-mnist"
+    return lowered
+
+
+def _load_dataset(dataset_cls, root: str, train: bool, transform, name: str):
+    try:
+        return dataset_cls(root, train=train, download=False, transform=transform)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            f"{name} dataset not found in {root}. Download is disabled. "
+            "Place the dataset files manually or set --data-dir to an existing dataset."
+        ) from exc
+
+
+def get_dataset_loaders(config: DataConfig) -> Tuple[DataLoader, DataLoader, DataLoader, dict]:
+    dataset_key = normalize_dataset_name(config.dataset)
+    if dataset_key not in DATASET_REGISTRY:
+        raise ValueError(f"unsupported dataset: {config.dataset}")
+
+    meta = DATASET_REGISTRY[dataset_key]
     transform = transforms.Compose(
         [
             transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,)),
+            transforms.Normalize(meta["mean"], meta["std"]),
         ]
     )
 
-    train_dataset = datasets.MNIST(config.data_dir, train=True, download=True, transform=transform)
-    test_dataset = datasets.MNIST(config.data_dir, train=False, download=True, transform=transform)
+    train_dataset = _load_dataset(meta["cls"], config.data_dir, True, transform, dataset_key)
+    test_dataset = _load_dataset(meta["cls"], config.data_dir, False, transform, dataset_key)
 
     val_size = min(config.val_size, len(train_dataset) - 1)
     train_size = len(train_dataset) - val_size
@@ -56,10 +104,14 @@ def get_mnist_loaders(config: DataConfig) -> Tuple[DataLoader, DataLoader, DataL
     )
 
     info = {
+        "dataset": dataset_key,
         "train_size": train_size,
         "val_size": val_size,
         "test_size": len(test_dataset),
-        "mean": 0.1307,
-        "std": 0.3081,
+        "mean": meta["mean"],
+        "std": meta["std"],
+        "channels": meta["channels"],
+        "height": meta["size"],
+        "width": meta["size"],
     }
     return train_loader, val_loader, test_loader, info

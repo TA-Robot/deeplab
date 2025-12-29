@@ -75,3 +75,5 @@ h' = h + gamma * sum_k beta_k * Norm(f_k(h))
 - The implementation uses 1D feature-neighborhood operators as a practical
   CPU-friendly approximation for diffusion and pooling primitives.
 - Parameter count is reported as both trainable and total (including buffers).
+- Dataset selection is controlled by `--dataset`. Downloads are disabled, so
+  datasets must be placed under `project/data/` (or `--data-dir`).

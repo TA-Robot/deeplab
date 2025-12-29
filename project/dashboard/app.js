@@ -35,6 +35,14 @@ function formatSeconds(stats) {
   return `${mean.toFixed(1)}s (+/- ${std.toFixed(1)}s) / ${meanMin.toFixed(2)}m`;
 }
 
+function formatParamPair(totalStats, trainableStats) {
+  if (!totalStats || totalStats.mean === undefined) return "-";
+  const total = totalStats.mean.toFixed(0);
+  if (!trainableStats || trainableStats.mean === undefined) return total;
+  const trainable = trainableStats.mean.toFixed(0);
+  return `${total} / ${trainable}`;
+}
+
 function formatDelta(value, higherIsBetter, suffix = "%") {
   if (value === undefined || value === null) {
     return { label: "-", className: "delta-neutral" };
@@ -66,7 +74,7 @@ function addRunCard(container, key, run) {
   card.appendChild(wall);
 
   const params = document.createElement("p");
-  params.textContent = `Params: ${formatNumber(run.param_count, 0, "")}`;
+  params.textContent = `Params: ${formatParamPair(run.param_count, run.trainable_param_count)}`;
   card.appendChild(params);
 
   const epoch = document.createElement("p");
@@ -236,12 +244,13 @@ async function main() {
       const step = run.summary.aggregate?.final_train_step_time_ms;
       const wall = run.summary.aggregate?.wall_time_sec;
       const accPerWall = run.derived?.accuracy_per_wall_time;
-      const param = run.param_count;
+      const totalParams = run.param_count;
+      const trainableParams = run.trainable_param_count;
       const accMean = acc?.mean;
       const guardrailStatus = accMean !== undefined && accMean !== null && accMean >= guardrail;
       row.innerHTML = `
         <td>${MODEL_LABELS[key] || key}</td>
-        <td>${formatNumber(param, 0, "")}</td>
+        <td>${formatParamPair(totalParams, trainableParams)}</td>
         <td>${formatPercent(acc)}</td>
         <td>${formatNumber(step, 2, " ms")}</td>
         <td>${formatSeconds(wall)}</td>

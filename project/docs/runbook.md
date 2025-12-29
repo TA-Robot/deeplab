@@ -25,6 +25,7 @@ pip install -r requirements.txt --index-url https://download.pytorch.org/whl/cpu
 cd project
 python run_mnist_experiment.py \
   --model mlp \
+  --dataset mnist \
   --seeds 1,2,3 \
   --epochs 5 \
   --batch-size 128 \
@@ -39,6 +40,7 @@ python run_mnist_experiment.py \
 cd project
 python run_mnist_experiment.py \
   --model mlp-obl \
+  --dataset mnist \
   --seeds 1,2,3 \
   --epochs 5 \
   --batch-size 128 \
@@ -56,6 +58,7 @@ python run_mnist_experiment.py \
 cd project
 python run_mnist_experiment.py \
   --model cnn \
+  --dataset mnist \
   --seeds 1,2,3 \
   --epochs 5 \
   --batch-size 128 \
@@ -70,6 +73,7 @@ python run_mnist_experiment.py \
 cd project
 python run_mnist_experiment.py \
   --model cnn-obl \
+  --dataset mnist \
   --seeds 1,2,3 \
   --epochs 5 \
   --batch-size 128 \
@@ -96,6 +100,8 @@ python run_mnist_experiment.py \
   - 正規化は `--obl-norm layernorm|rmsnorm`
   - 乱数固定は `--obl-seed <int>` を使用
   - 実装の詳細は `project/docs/obl-implementation.md` を参照
+  - データセットは `--dataset mnist|fashion-mnist|cifar10` で切替
+  - ダウンロードは無効。`project/data/` に手動配置するか `--data-dir` を指定
 
 ### バックグラウンド並列（例）
 
