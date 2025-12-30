@@ -4,7 +4,7 @@ ID: 20251229-ros-alth-mnist-cpu
 Owner: TBD
 Date: 2025-12-29
 Hypothesis:
-  Operator Basis Layer (K=32, full mixture with per-operator Norm)
+  Operator Basis Layer (K=59, full mixture with per-operator Norm)
   is stable on CPU MNIST and achieves comparable accuracy with
   controlled runtime overhead.
 Baseline:
@@ -31,7 +31,7 @@ Resource budget:
   CPU only, max wall clock 2 hours total.
 Notes:
   - Use fixed seeds and record environment (CPU model, BLAS, OS).
-  - Keep K=32 only (no growth schedule in this first run).
+  - Keep K=59 only (no growth schedule in this first run).
   - Initialize new betas near 0 and set small residual scale gamma.
   - Keep dataset and preprocessing identical across runs.
   - Use train/val/test split and only evaluate test at the end.

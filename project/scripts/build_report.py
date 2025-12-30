@@ -313,6 +313,7 @@ def main() -> int:
         run_dirs = run_dirs[-args.limit :]
 
     runs: dict[str, dict] = {}
+    run_mtime: dict[str, float] = {}
     for run_dir in run_dirs:
         try:
             run = load_run(run_dir)
@@ -320,7 +321,11 @@ def main() -> int:
             continue
         model_key = run.get("model")
         if model_key:
-            runs[model_key] = run
+            summary_path = run_dir / "summary.json"
+            mtime = summary_path.stat().st_mtime
+            if model_key not in run_mtime or mtime >= run_mtime[model_key]:
+                runs[model_key] = run
+                run_mtime[model_key] = mtime
 
     comparisons = {}
     if "mlp" in runs and "mlp-obl" in runs:
