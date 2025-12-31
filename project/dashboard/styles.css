@@ -100,6 +100,18 @@ h1 {
   font-weight: 600;
 }
 
+.meta-select {
+  width: 100%;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-size: 0.9rem;
+  background: #fffdf8;
+  color: var(--ink-900);
+  margin-bottom: 8px;
+}
+
 .section {
   margin-top: 40px;
 }

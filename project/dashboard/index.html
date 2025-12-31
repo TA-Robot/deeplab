@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ROS-ALTH MNIST Report</title>
+    <title>ROS-ALTH Experiment Report</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
   </head>
@@ -12,11 +12,11 @@
     <main class="page">
       <header class="hero">
         <div>
-          <p class="eyebrow">ROS-ALTH MNIST CPU Report</p>
+          <p class="eyebrow">ROS-ALTH Experiment Report</p>
           <h1>Operator Basis Layer Evaluation</h1>
           <p class="subtitle">
             Single-screen dashboard with wall-time, learning curves, and multi-angle analysis across
-            MLP/CNN baselines and OBL variants.
+            MLP/CNN baselines and OBL variants, with dataset-level selection.
           </p>
         </div>
         <div class="hero-meta">
@@ -26,7 +26,13 @@
           </div>
           <div class="meta-card">
             <p class="meta-label">Dataset</p>
+            <select id="dataset-select" class="meta-select"></select>
             <p id="dataset-info" class="meta-value">-</p>
+          </div>
+          <div class="meta-card">
+            <p class="meta-label">Run Group</p>
+            <select id="group-select" class="meta-select"></select>
+            <p id="group-info" class="meta-value">-</p>
           </div>
         </div>
       </header>
@@ -156,9 +162,9 @@
           <div class="panel">
             <h3>Notes</h3>
             <p class="note">
-              This report follows a fixed train/val/test split, three seeds, and CPU-only runs. No
-              hyperparameter tuning is performed on test metrics. If accuracy gaps are large,
-              adjust hidden sizes and rerun.
+              Use the dataset and run-group selectors to review MNIST, Fashion-MNIST, and CIFAR-10 runs.
+              This report follows a fixed train/val/test split and three seeds; no hyperparameter tuning
+              is performed on test metrics. If accuracy gaps are large, adjust hidden sizes and rerun.
             </p>
           </div>
         </div>

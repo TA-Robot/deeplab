@@ -1,6 +1,7 @@
 # Dashboard Report
 
 This dashboard renders metrics from `project/runs/` in a single-page report.
+The UI includes dataset and run-group selectors when multiple datasets are present.
 
 ## Build
 
@@ -20,4 +21,4 @@ Open `http://localhost:8000` in a browser.
 - `runs/<run-id>/summary.json`
 
 The report aggregates mean/std across seeds, compares baselines vs OBL variants,
-and renders guardrail status, deltas, variance, and learning curves on one page.
+and renders guardrail status, deltas, variance, and learning curves per dataset/run group.

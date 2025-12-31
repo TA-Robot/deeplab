@@ -299,8 +299,27 @@ def derive_metrics(run: dict) -> dict:
     }
 
 
+def infer_dataset(run: dict) -> str:
+    data_info = run.get("data_info") or {}
+    dataset = data_info.get("dataset")
+    if dataset:
+        return dataset
+    config = run.get("config") or {}
+    return config.get("dataset") or "unknown"
+
+
+def infer_group_id(run: dict, dataset: str) -> str:
+    run_id = run.get("run_id") or ""
+    model = run.get("model")
+    if run_id and dataset and model:
+        suffix = f"-{dataset}-{model}"
+        if run_id.endswith(suffix):
+            return run_id[: -len(suffix)]
+    return run_id or "unknown"
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build dashboard report from MNIST run artifacts")
+    parser = argparse.ArgumentParser(description="Build dashboard report from run artifacts")
     parser.add_argument("--runs-dir", type=str, default="runs")
     parser.add_argument("--output", type=str, default="dashboard/data/report.json")
     parser.add_argument("--limit", type=int, default=0)
@@ -312,42 +331,74 @@ def main() -> int:
     if args.limit > 0:
         run_dirs = run_dirs[-args.limit :]
 
-    runs: dict[str, dict] = {}
-    run_mtime: dict[str, float] = {}
+    runs_by_dataset: dict[str, dict[str, dict[str, dict]]] = defaultdict(dict)
+    run_mtime: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
     for run_dir in run_dirs:
         try:
             run = load_run(run_dir)
         except FileNotFoundError:
             continue
         model_key = run.get("model")
-        if model_key:
-            summary_path = run_dir / "summary.json"
-            mtime = summary_path.stat().st_mtime
-            if model_key not in run_mtime or mtime >= run_mtime[model_key]:
-                runs[model_key] = run
-                run_mtime[model_key] = mtime
-
-    comparisons = {}
-    if "mlp" in runs and "mlp-obl" in runs:
-        comparisons["mlp"] = compare_runs(runs["mlp"], runs["mlp-obl"])
-    if "cnn" in runs and "cnn-obl" in runs:
-        comparisons["cnn"] = compare_runs(runs["cnn"], runs["cnn-obl"])
+        if not model_key:
+            continue
+        dataset = infer_dataset(run)
+        group_id = infer_group_id(run, dataset)
+        summary_path = run_dir / "summary.json"
+        mtime = summary_path.stat().st_mtime
+        current_mtime = run_mtime[dataset][group_id].get(model_key)
+        if current_mtime is None or mtime >= current_mtime:
+            runs_by_dataset[dataset].setdefault(group_id, {})[model_key] = run
+            run_mtime[dataset][group_id][model_key] = mtime
 
     guardrail = 0.97
-    data_info = None
-    for run in runs.values():
-        if run.get("data_info"):
-            data_info = run["data_info"]
-            break
+    datasets_report: dict[str, dict[str, Any]] = {}
+    for dataset, groups in runs_by_dataset.items():
+        group_reports: dict[str, Any] = {}
+        dataset_info = None
+        group_mtimes: dict[str, float] = {}
+        for group_id, runs in groups.items():
+            comparisons = {}
+            if "mlp" in runs and "mlp-obl" in runs:
+                comparisons["mlp"] = compare_runs(runs["mlp"], runs["mlp-obl"])
+            if "cnn" in runs and "cnn-obl" in runs:
+                comparisons["cnn"] = compare_runs(runs["cnn"], runs["cnn-obl"])
+
+            data_info = None
+            for run in runs.values():
+                if run.get("data_info"):
+                    data_info = run["data_info"]
+                    break
+            if dataset_info is None and data_info:
+                dataset_info = data_info
+
+            group_reports[group_id] = {
+                "run_group": group_id,
+                "runs": runs,
+                "comparisons": comparisons,
+                "insights": build_insights(runs),
+                "analysis_sections": build_analysis_sections(runs, comparisons, guardrail),
+                "guardrail": guardrail,
+                "dataset": data_info,
+            }
+            group_mtimes[group_id] = max(run_mtime[dataset][group_id].values())
+
+        latest_group = None
+        if group_mtimes:
+            latest_group = max(group_mtimes.items(), key=lambda item: item[1])[0]
+
+        if dataset_info is None:
+            dataset_info = {"dataset": dataset}
+
+        datasets_report[dataset] = {
+            "groups": group_reports,
+            "dataset": dataset_info,
+            "latest_group": latest_group,
+        }
 
     report = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "runs": runs,
-        "comparisons": comparisons,
-        "insights": build_insights(runs),
-        "analysis_sections": build_analysis_sections(runs, comparisons, guardrail),
         "guardrail": guardrail,
-        "dataset": data_info,
+        "datasets": datasets_report,
     }
 
     output = Path(args.output)
