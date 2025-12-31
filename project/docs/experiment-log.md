@@ -1,5 +1,35 @@
 # Experiment Log
 
+- 2025-12-30: 20251230-ros-alth-gpu-mnist (running)
+  - Brief: project/docs/experiment-20251230-ros-alth-gpu-mnist.md
+  - Status: running (GPU parallel)
+  - Notes: GPU rerun of MNIST baselines vs OBL full profile (K=59); datasets via background download
+  - Run IDs:
+    - 20251230-ros-alth-gpu-mnist-mlp-baseline
+    - 20251230-ros-alth-gpu-mnist-mlp-obl
+    - 20251230-ros-alth-gpu-mnist-cnn-baseline
+    - 20251230-ros-alth-gpu-mnist-cnn-obl
+
+- 2025-12-30: 20251230-ros-alth-gpu-fashion-mnist (running)
+  - Brief: project/docs/experiment-20251230-ros-alth-gpu-fashion-mnist.md
+  - Status: running (GPU parallel)
+  - Notes: GPU run for Fashion-MNIST baselines vs OBL full profile (K=59)
+  - Run IDs:
+    - 20251230-ros-alth-gpu-fashion-mnist-mlp-baseline
+    - 20251230-ros-alth-gpu-fashion-mnist-mlp-obl
+    - 20251230-ros-alth-gpu-fashion-mnist-cnn-baseline
+    - 20251230-ros-alth-gpu-fashion-mnist-cnn-obl
+
+- 2025-12-30: 20251230-ros-alth-gpu-cifar10 (running)
+  - Brief: project/docs/experiment-20251230-ros-alth-gpu-cifar10.md
+  - Status: running (GPU parallel)
+  - Notes: GPU run for CIFAR-10 baselines vs OBL full profile (K=59)
+  - Run IDs:
+    - 20251230-ros-alth-gpu-cifar10-mlp-baseline
+    - 20251230-ros-alth-gpu-cifar10-mlp-obl
+    - 20251230-ros-alth-gpu-cifar10-cnn-baseline
+    - 20251230-ros-alth-gpu-cifar10-cnn-obl
+
 - 2025-12-30: 20251229-ros-alth-mnist-cpu (running)
   - Brief: project/docs/experiment-20251229-ros-alth-mnist-cpu.md
   - Status: running (parallel)
@@ -11,6 +41,24 @@
     - 20251229-ros-alth-mnist-cpu-cnn-baseline
     - 20251229-ros-alth-mnist-cpu-mlp-obl
     - 20251229-ros-alth-mnist-cpu-cnn-obl
+
+- 2025-12-30: 20251230-ros-alth-gpu-fast (running)
+  - Brief: project/docs/experiment-20251230-ros-alth-gpu-fast.md
+  - Status: running (GPU parallel)
+  - Notes: fast profile (no O(D^2) ops; low-rank/group mix/permute blur added)
+  - Run IDs:
+    - 20251230-fast-ros-alth-gpu-mnist-mlp
+    - 20251230-fast-ros-alth-gpu-mnist-mlp-obl
+    - 20251230-fast-ros-alth-gpu-mnist-cnn
+    - 20251230-fast-ros-alth-gpu-mnist-cnn-obl
+    - 20251230-fast-ros-alth-gpu-fashion-mnist-mlp
+    - 20251230-fast-ros-alth-gpu-fashion-mnist-mlp-obl
+    - 20251230-fast-ros-alth-gpu-fashion-mnist-cnn
+    - 20251230-fast-ros-alth-gpu-fashion-mnist-cnn-obl
+    - 20251230-fast-ros-alth-gpu-cifar10-mlp
+    - 20251230-fast-ros-alth-gpu-cifar10-mlp-obl
+    - 20251230-fast-ros-alth-gpu-cifar10-cnn
+    - 20251230-fast-ros-alth-gpu-cifar10-cnn-obl
 
 - 2025-12-29: 20251229-ros-alth-mnist-cpu (superseded)
   - Brief: project/docs/experiment-20251229-ros-alth-mnist-cpu.md

@@ -44,26 +44,38 @@ h' = h + gamma * sum_k beta_k * Norm(f_k(h))
 6) Soft ranking / assignment
    - SoftSort (Sinkhorn-normalized proximity to a reference order)
    - Sinkhorn assignment against a random reference vector
+   - `fast` profile excludes SoftSort/Sinkhorn to avoid O(D^2) costs
 
 7) Attention (lightweight)
    - Scalar attention over feature positions with softmax temperature
+   - `fast` profile excludes attention to avoid O(D^2) costs
 
-8) Random program composition
+8) Lightweight activations (fast profile)
+   - silu / softplus / elu as elementwise nonlinear alternatives
+
+9) Low-rank / grouped mixing (fast profile)
+   - Low-rank bilinear mixing (O(D·r))
+   - Grouped block mixing (O(D·g))
+   - Permuted blur for long-range feature interaction (O(D·k))
+
+10) Random program composition
    - Random sequences of primitives (depth 2-4)
    - Optional residual skip per program
 
 ## Random program primitives
 
-- linear, sin, cos, gelu, tanh, sigmoid
+- linear, sin, cos, gelu, tanh, sigmoid, silu, softplus, elu
+- lowrank, groupmix, permblur
 - poly2, poly3
 - rational, diffusion
 - softpool, softneighbor
 - rbf, softsort, sinkhorn
 - attention
+- `fast` profile removes softsort/sinkhorn/attention and adds lowrank/groupmix/permblur
 
 ## Configuration highlights
 
-- `--obl-profile full|mini` selects operator coverage.
+- `--obl-profile full|mini|fast` selects operator coverage.
 - `--obl-programs N` overrides number of random programs.
 - `--obl-seed` fixes operator initialization and program sampling.
 - `--obl-norm layernorm|rmsnorm` chooses normalization.
@@ -75,5 +87,5 @@ h' = h + gamma * sum_k beta_k * Norm(f_k(h))
 - The implementation uses 1D feature-neighborhood operators as a practical
   CPU-friendly approximation for diffusion and pooling primitives.
 - Parameter count is reported as both trainable and total (including buffers).
-- Dataset selection is controlled by `--dataset`. Downloads are disabled, so
-  datasets must be placed under `project/data/` (or `--data-dir`).
+- Dataset selection is controlled by `--dataset`. Use `--download` to fetch
+  datasets into `project/data/` (or set `--data-dir`).

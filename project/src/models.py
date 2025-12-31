@@ -78,16 +78,22 @@ class MLPWithOBL(nn.Module):
 class CNNClassifier(nn.Module):
     def __init__(
         self,
+        input_shape: tuple[int, int, int] = (1, 28, 28),
         fc_dims: Sequence[int] = (256, 128),
         num_classes: int = 10,
         dropout: float = 0.1,
     ) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
+        channels, height, width = (int(v) for v in input_shape)
+        self.conv1 = nn.Conv2d(channels, 32, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
         self.pool = nn.MaxPool2d(2)
         dims = _normalize_dims(fc_dims)
-        prev = 64 * 7 * 7
+        feat_h = height // 4
+        feat_w = width // 4
+        if feat_h <= 0 or feat_w <= 0:
+            raise ValueError(f"input spatial dims too small: {height}x{width}")
+        prev = 64 * feat_h * feat_w
         self.fcs = nn.ModuleList()
         for dim in dims:
             self.fcs.append(nn.Linear(prev, dim))
@@ -110,17 +116,23 @@ class CNNClassifier(nn.Module):
 class CNNWithOBL(nn.Module):
     def __init__(
         self,
+        input_shape: tuple[int, int, int] = (1, 28, 28),
         fc_dims: Sequence[int] = (256, 128),
         num_classes: int = 10,
         dropout: float = 0.1,
         obl_config: OperatorBasisConfig | None = None,
     ) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
+        channels, height, width = (int(v) for v in input_shape)
+        self.conv1 = nn.Conv2d(channels, 32, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
         self.pool = nn.MaxPool2d(2)
         dims = _normalize_dims(fc_dims)
-        prev = 64 * 7 * 7
+        feat_h = height // 4
+        feat_w = width // 4
+        if feat_h <= 0 or feat_w <= 0:
+            raise ValueError(f"input spatial dims too small: {height}x{width}")
+        prev = 64 * feat_h * feat_w
         self.fcs = nn.ModuleList()
         self.obl_layers = nn.ModuleList()
         for dim in dims:

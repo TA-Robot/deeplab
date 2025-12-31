@@ -16,6 +16,7 @@ class DataConfig:
     num_workers: int = 0
     seed: int = 42
     dataset: str = "mnist"
+    download: bool = False
 
 
 DATASET_REGISTRY = {
@@ -50,13 +51,18 @@ def normalize_dataset_name(name: str) -> str:
     return lowered
 
 
-def _load_dataset(dataset_cls, root: str, train: bool, transform, name: str):
+def _load_dataset(dataset_cls, root: str, train: bool, transform, name: str, download: bool):
     try:
-        return dataset_cls(root, train=train, download=False, transform=transform)
+        return dataset_cls(root, train=train, download=download, transform=transform)
     except Exception as exc:  # noqa: BLE001
+        if download:
+            raise RuntimeError(
+                f"Failed to download {name} dataset to {root}. Check network access or permissions."
+            ) from exc
         raise RuntimeError(
             f"{name} dataset not found in {root}. Download is disabled. "
-            "Place the dataset files manually or set --data-dir to an existing dataset."
+            "Place the dataset files manually, set --data-dir to an existing dataset, "
+            "or pass --download to fetch it."
         ) from exc
 
 
@@ -73,8 +79,8 @@ def get_dataset_loaders(config: DataConfig) -> Tuple[DataLoader, DataLoader, Dat
         ]
     )
 
-    train_dataset = _load_dataset(meta["cls"], config.data_dir, True, transform, dataset_key)
-    test_dataset = _load_dataset(meta["cls"], config.data_dir, False, transform, dataset_key)
+    train_dataset = _load_dataset(meta["cls"], config.data_dir, True, transform, dataset_key, config.download)
+    test_dataset = _load_dataset(meta["cls"], config.data_dir, False, transform, dataset_key, config.download)
 
     val_size = min(config.val_size, len(train_dataset) - 1)
     train_size = len(train_dataset) - val_size

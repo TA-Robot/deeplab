@@ -22,6 +22,10 @@ class OperatorBasisConfig:
     seed: int | None = None
     learnable_shared: bool = False
     learnable_gates: bool = False
+    activation_ops: Sequence[str] = ()
+    lowrank_ranks: Sequence[int] = ()
+    group_sizes: Sequence[int] = ()
+    permute_blur_sigmas: Sequence[float] = ()
     rff_scales: Sequence[float] = (0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0)
     poly_degrees: Sequence[int] = (2, 3, 4)
     gate_count: int = 2
@@ -81,6 +85,40 @@ def build_obl_config(input_dim: int, profile: str = "full", **overrides: object)
             sinkhorn_taus=(),
             sinkhorn_iters=(),
             num_programs=0,
+        )
+    elif profile == "fast":
+        base = OperatorBasisConfig(
+            input_dim=input_dim,
+            attn_dims=(),
+            attn_taus=(),
+            softsort_taus=(),
+            sinkhorn_taus=(),
+            sinkhorn_iters=(),
+            activation_ops=("silu", "softplus", "elu"),
+            lowrank_ranks=(8, 16),
+            group_sizes=(8, 16),
+            permute_blur_sigmas=(0.5, 1.0),
+            program_primitives=(
+                "linear",
+                "sin",
+                "cos",
+                "gelu",
+                "tanh",
+                "sigmoid",
+                "silu",
+                "softplus",
+                "elu",
+                "lowrank",
+                "groupmix",
+                "permblur",
+                "poly2",
+                "poly3",
+                "rational",
+                "diffusion",
+                "softpool",
+                "softneighbor",
+                "rbf",
+            ),
         )
     elif profile == "full":
         base = OperatorBasisConfig(input_dim=input_dim)
@@ -401,7 +439,73 @@ class ActivationOperator(BaseOperator):
             return torch.tanh(x)
         if self.kind == "sigmoid":
             return torch.sigmoid(x)
+        if self.kind == "silu":
+            return F.silu(x)
+        if self.kind == "softplus":
+            return F.softplus(x)
+        if self.kind == "elu":
+            return F.elu(x)
         raise ValueError(f"unsupported activation: {self.kind}")
+
+
+class LowRankBilinearOperator(BaseOperator):
+    def __init__(self, input_dim: int, rank: int, generator: torch.Generator | None) -> None:
+        super().__init__(f"lowrank_{rank}")
+        if rank <= 0:
+            raise ValueError(f"rank must be positive, got {rank}")
+        self.left = FixedLinear(input_dim, rank, bias=True, learnable=False, generator=generator)
+        self.right = FixedLinear(input_dim, rank, bias=True, learnable=False, generator=generator)
+        self.out = FixedLinear(rank, input_dim, bias=True, learnable=False, generator=generator)
+
+    def forward(self, x: torch.Tensor, ctx: OperatorContext) -> torch.Tensor:
+        z = self.left(x) * self.right(x)
+        return self.out(z)
+
+
+class GroupMixOperator(BaseOperator):
+    def __init__(self, input_dim: int, group_size: int, generator: torch.Generator | None) -> None:
+        super().__init__(f"groupmix_{group_size}")
+        if group_size <= 0:
+            raise ValueError(f"group_size must be positive, got {group_size}")
+        if input_dim % group_size != 0:
+            raise ValueError(f"group_size {group_size} must divide input_dim {input_dim}")
+        groups = input_dim // group_size
+        bound = 1.0 / math.sqrt(group_size)
+        weight = torch.empty(groups, group_size, group_size)
+        if generator is None:
+            weight.uniform_(-bound, bound)
+        else:
+            weight.uniform_(-bound, bound, generator=generator)
+        self.register_buffer("weight", weight)
+
+    def forward(self, x: torch.Tensor, ctx: OperatorContext) -> torch.Tensor:
+        batch, dim = x.shape
+        groups, group_size, _ = self.weight.shape
+        x_grouped = x.reshape(batch, groups, group_size)
+        out = torch.einsum("bgs,gsh->bgh", x_grouped, self.weight)
+        return out.reshape(batch, dim)
+
+
+class PermutedBlurOperator(BaseOperator):
+    def __init__(self, input_dim: int, sigma: float, generator: torch.Generator | None) -> None:
+        super().__init__(f"permblur_{sigma:g}")
+        if generator is None:
+            perm = torch.randperm(input_dim)
+        else:
+            perm = torch.randperm(input_dim, generator=generator)
+        inv_perm = torch.empty_like(perm)
+        inv_perm[perm] = torch.arange(input_dim)
+        kernel = gaussian_kernel_1d(sigma).view(1, 1, -1)
+        self.register_buffer("perm", perm)
+        self.register_buffer("inv_perm", inv_perm)
+        self.register_buffer("kernel", kernel)
+        self.pad = kernel.shape[-1] // 2
+
+    def forward(self, x: torch.Tensor, ctx: OperatorContext) -> torch.Tensor:
+        x_perm = x.index_select(1, self.perm)
+        out = F.conv1d(x_perm.unsqueeze(1), self.kernel, padding=self.pad)
+        out = out.squeeze(1)
+        return out.index_select(1, self.inv_perm)
 
 
 class LinearOperator(BaseOperator):
@@ -538,6 +642,26 @@ class OperatorBasisLayer(nn.Module):
             ops.append(op)
             names.append(op.name)
 
+        for kind in config.activation_ops:
+            op = ActivationOperator(kind=kind)
+            ops.append(op)
+            names.append(op.name)
+
+        for rank in config.lowrank_ranks:
+            op = LowRankBilinearOperator(self.input_dim, rank, generator)
+            ops.append(op)
+            names.append(op.name)
+
+        for group_size in config.group_sizes:
+            op = GroupMixOperator(self.input_dim, group_size, generator)
+            ops.append(op)
+            names.append(op.name)
+
+        for sigma in config.permute_blur_sigmas:
+            op = PermutedBlurOperator(self.input_dim, sigma, generator)
+            ops.append(op)
+            names.append(op.name)
+
         for num_proto in config.rbf_prototypes:
             for sigma in config.rbf_sigmas:
                 op = RBFOperator(self.input_dim, num_proto, sigma, generator)
@@ -610,6 +734,21 @@ class OperatorBasisLayer(nn.Module):
             return ActivationOperator(kind="tanh")
         if prim_name == "sigmoid":
             return ActivationOperator(kind="sigmoid")
+        if prim_name == "silu":
+            return ActivationOperator(kind="silu")
+        if prim_name == "softplus":
+            return ActivationOperator(kind="softplus")
+        if prim_name == "elu":
+            return ActivationOperator(kind="elu")
+        if prim_name == "lowrank":
+            rank = rng.choice(list(config.lowrank_ranks)) if config.lowrank_ranks else 8
+            return LowRankBilinearOperator(self.input_dim, rank, generator)
+        if prim_name == "groupmix":
+            group_size = rng.choice(list(config.group_sizes)) if config.group_sizes else 8
+            return GroupMixOperator(self.input_dim, group_size, generator)
+        if prim_name == "permblur":
+            sigma = rng.choice(list(config.permute_blur_sigmas)) if config.permute_blur_sigmas else 1.0
+            return PermutedBlurOperator(self.input_dim, sigma, generator)
         if prim_name == "poly2":
             return PolynomialOperator(degree=2)
         if prim_name == "poly3":

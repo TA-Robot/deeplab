@@ -45,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id", type=str, default="")
     parser.add_argument("--output-root", type=str, default="runs")
     parser.add_argument("--data-dir", type=str, default="data")
+    parser.add_argument("--download", action="store_true")
     parser.add_argument("--beta-l1", type=float, default=0.0)
     parser.add_argument("--operator-dropout", type=float, default=0.0)
     parser.add_argument("--gamma", type=float, default=0.1)
@@ -56,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cnn-fc-layers", type=int, default=2)
     parser.add_argument("--cnn-fc-dims", type=str, default="")
     parser.add_argument("--save-model", action="store_true")
-    parser.add_argument("--obl-profile", choices=("mini", "full"), default="full")
+    parser.add_argument("--obl-profile", choices=("mini", "fast", "full"), default="full")
     parser.add_argument("--obl-seed", type=int, default=-1)
     parser.add_argument("--obl-norm", choices=("layernorm", "rmsnorm"), default="layernorm")
     parser.add_argument("--obl-programs", type=int, default=-1)
@@ -158,6 +159,7 @@ def main() -> int:
         num_workers=args.num_workers,
         seed=args.data_seed,
         dataset=args.dataset,
+        download=args.download,
     )
 
     torch_config = None
@@ -211,6 +213,7 @@ def main() -> int:
         "obl_programs": args.obl_programs,
         "dataset": args.dataset,
         "data_dir": data_config.data_dir,
+        "download": args.download,
     }
 
     write_json(run_dir / "config.json", config)
