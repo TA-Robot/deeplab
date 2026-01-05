@@ -1,5 +1,21 @@
 # Experiment Log
 
+- 2026-01-05: 20260105-grad-speedup-cifar10 (planning)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: planning
+  - Notes: CIFAR-10 algorithmic speedup track (module combinations, cost-to-target)
+  - Smoke runs:
+    - 20260105-grad-speedup-cifar10-smoke-mini (small-cnn, CPU, val_size=49000 for pipeline check)
+    - 20260105-grad-speedup-cifar10-baseline-sgd-mini (small-cnn, CPU, val_size=49000)
+    - 20260105-grad-speedup-cifar10-baseline-adam-mini (small-cnn, CPU, val_size=49000)
+    - 20260105-grad-speedup-cifar10-config-mini (small-cnn, CPU, config-driven)
+  - Run IDs:
+    - 20260105-grad-speedup-cifar10-baseline-sgd
+    - 20260105-grad-speedup-cifar10-baseline-adam
+    - 20260105-grad-speedup-cifar10-modC
+    - 20260105-grad-speedup-cifar10-modB
+    - 20260105-grad-speedup-cifar10-modB-modC
+
 - 2025-12-30: 20251230-ros-alth-gpu-mnist (running)
   - Brief: project/docs/experiment-20251230-ros-alth-gpu-mnist.md
   - Status: running (GPU parallel)
@@ -59,6 +75,15 @@
     - 20251230-fast-ros-alth-gpu-cifar10-mlp-obl
     - 20251230-fast-ros-alth-gpu-cifar10-cnn
     - 20251230-fast-ros-alth-gpu-cifar10-cnn-obl
+
+- 2026-01-05: 20260105-grad-speedup-cifar10-baseline (running)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: running (CPU baseline smoke runs)
+  - Notes: baseline sanity checks before paper-accurate modules are integrated.
+  - Run IDs:
+    - 20260105-grad-speedup-smallcnn-baseline
+    - 20260105-grad-speedup-resnet18-baseline
+    - 20260105-grad-speedup-smallcnn-silver
 
 - 2025-12-29: 20251229-ros-alth-mnist-cpu (superseded)
   - Brief: project/docs/experiment-20251229-ros-alth-mnist-cpu.md

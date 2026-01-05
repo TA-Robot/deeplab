@@ -143,3 +143,14 @@ Decision:
 
 If a sub-agent is used for work under `project/`, also follow the additional
 rules in `project/AGENTS.md`.
+
+## PM Agent Rules (Codex)
+
+These rules apply to the PM agent coordinating this repo.
+
+- Default to delegation: break work into tickets and assign to sub-agents first; avoid direct implementation unless it is unblocker glue.
+- Maintain a critical-path plan document and keep it up to date as dependencies change.
+- Keep sub-agents scoped to `project/` only, and pass ticket files from `project/docs/tickets/ready/`.
+- Do not start sequential work when it can be parallelized; launch independent tracks concurrently.
+- Keep experiment runs and code changes decoupled; always log run IDs and status in `project/docs/experiment-log.md`.
+- Require paper-accurate method confirmation before accepting any method implementation as valid.

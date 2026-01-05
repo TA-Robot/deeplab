@@ -27,6 +27,22 @@
   - 代替案: full のままチューニング / 演算子数だけ削減
   - 影響: `--obl-profile fast` で O(D^2) 演算を除外し、低ランク/グループ混合・permute blur・軽量活性を追加
 
+- 2026-01-05: 勾配法高速化の新トラックを分離するため `project/docs/grad-speedup/` と `project/experiments/grad-speedup/` を新設
+  - 背景: ROS-ALTH 系実験と目的/指標が異なるため、成果物と運用を分離したい
+  - 代替案: 既存の docs/ と scripts/ に混在させる
+  - 影響: 勾配法高速化の仕様/ノートは `project/docs/grad-speedup/`、実験設定は `project/experiments/grad-speedup/` に集約
+  - 注記: 2026-01-05 の完全分離決定により `project/experiments/grad-speedup/` は廃止
+
+- 2026-01-05: 勾配法高速化のコードを完全分離するため `project/grad-speedup/` を新設し、`project/experiments/grad-speedup/` を廃止
+  - 背景: ROS-ALTH とコードや実験導線を混在させないため
+  - 代替案: 既存の `project/src` を流用 / `project/experiments` 配下で継続
+  - 影響: grad-speedup のコード/スクリプトは `project/grad-speedup/` に集約し、runs は `project/runs/grad-speedup/` を使用
+
+- 2026-01-05: マルチエージェント運用のチケット置き場として `project/docs/tickets/ready/` を追加
+  - 背景: 作業分担を明示し、履歴と引き継ぎを追跡しやすくしたい
+  - 代替案: 一時ファイルとして個人管理 / 口頭共有
+  - 影響: サブエージェント起動前のチケットは `project/docs/tickets/ready/` に置く
+
 - YYYY-MM-DD: `<<判断>>`
   - 背景: `<<背景>>`
   - 代替案: `<<代替案>>`
