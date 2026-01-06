@@ -43,6 +43,21 @@
   - 代替案: 一時ファイルとして個人管理 / 口頭共有
   - 影響: サブエージェント起動前のチケットは `project/docs/tickets/ready/` に置く
 
+- 2026-01-05: grad-speedup のコード/ドキュメントを Git 追跡に含め、worktree から可視化
+  - 背景: 未追跡ディレクトリは worktree に反映されず、サブエージェントが対象を参照できなかった
+  - 代替案: 常に no-auto-worktree で実行 / 手動でファイル同期
+  - 影響: grad-speedup の全ファイルをコミットし、worktree でも参照可能にする
+
+- 2026-01-05: grad-speedup のチケット置き場を `project/docs/grad-speedup/tickets/` に分離
+  - 背景: 既存実験と完全分離し、PM運用も混在させないため
+  - 代替案: 共有の `project/docs/tickets/ready/` を継続利用
+  - 影響: grad-speedup 用チケットは `project/docs/grad-speedup/tickets/ready/` に置く
+
+- 2026-01-06: grad-speedup 実験を step ベース制御へ切り替え、eval_interval_steps=1000・max_steps=14,000 を既定に設定
+  - 背景: epoch 指標より step 数の方が比較一貫性が高く、学習曲線の解析にも適するため
+  - 代替案: epoch ベースを継続 / eval を epoch のみに固定
+  - 影響: 既存の epoch ベース結果は再取得前提とし、以降の実験は step ベースで管理する
+
 - YYYY-MM-DD: `<<判断>>`
   - 背景: `<<背景>>`
   - 代替案: `<<代替案>>`

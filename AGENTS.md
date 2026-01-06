@@ -150,7 +150,8 @@ These rules apply to the PM agent coordinating this repo.
 
 - Default to delegation: break work into tickets and assign to sub-agents first; avoid direct implementation unless it is unblocker glue.
 - Maintain a critical-path plan document and keep it up to date as dependencies change.
-- Keep sub-agents scoped to `project/` only, and pass ticket files from `project/docs/tickets/ready/`.
+- Keep sub-agents scoped to `project/` only. For grad-speedup, pass ticket files from `project/docs/grad-speedup/tickets/ready/` (use the global template in `project/docs/tickets/task-ticket.template.md`).
 - Do not start sequential work when it can be parallelized; launch independent tracks concurrently.
 - Keep experiment runs and code changes decoupled; always log run IDs and status in `project/docs/experiment-log.md`.
 - Require paper-accurate method confirmation before accepting any method implementation as valid.
+- If engineering progress is blocked, prioritize PM hygiene: update plan/critical-path, devlog, experiment-log, and PM status.

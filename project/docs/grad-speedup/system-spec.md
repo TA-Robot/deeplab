@@ -43,6 +43,12 @@ Training loop
 - Loss: CrossEntropyLoss.
 - Optimizers: SGD+momentum, Adam.
 - Determinism: optional flag, record in env.json.
+- Step-based control (preferred):
+  - max_steps: hard cap on total training steps (can stop mid-epoch). Default target: 14,000 steps.
+  - eval_interval_steps: run evaluation on a fixed step cadence (default 1000).
+- Epoch-based control (compat):
+  - epochs: still supported for legacy configs.
+  - eval_interval_epochs: optional; avoid double-eval when step eval is enabled.
 - Early stop:
   - mode "max": stop when highest target accuracy is hit.
   - mode "first": stop when any target is hit (screening).
@@ -63,16 +69,19 @@ Targets and metrics
 - Optional diagnostics (future): data loader wait time, peak GPU memory.
 
 Logging format (metrics.jsonl)
-- step records: type=step, split=train, epoch, global_step, loss, accuracy, lr, grad_norm, curvature, step_time_ms.
-- epoch records: type=epoch, split=train/test, epoch, global_step, loss, accuracy, samples, step_time_ms, throughput, steps, grad_norm stats, curvature stats.
+- step records: type=step, split=train, epoch, global_step, loss, accuracy, lr, step_size, grad_norm, curvature, step_time_ms, line_search_iters, line_search_accepted.
+- epoch records: type=epoch, split=train/test, epoch, global_step, loss, accuracy, samples, step_time_ms, throughput, steps, step_size stats, grad_norm stats, curvature stats, line_search stats.
 - timing records: type=epoch_timing, epoch, global_step, epoch_time_sec.
 
 Module interfaces (design intent)
 - Module B (direction): preconditioned direction (single choice).
-- Module C (step control): step_rule in {none, l0l1, eoss, silver}.
-  - l0l1: lr_eff = lr / (L0 + L1 * grad_norm).
-  - eoss: estimate directional curvature via HVP every K steps and cap lr by 2/(curvature+eps), scaled by beta.
-  - silver: scheduled step size based on the silver-ratio schedule (paper-accurate implementation required).
+- Module C (step control): step_rule in {none, l0l1, sps, sps-momentum, adaptive-backtracking, sagd, silver}.
+  - l0l1: lr_eff = lr / (L0 + L1 * ||g||).
+  - sps: lr_eff = max(f - f*, 0) / (||g||^2 + eps).
+  - sps-momentum: SPS step size with heavy-ball momentum beta.
+  - adaptive-backtracking: stochastic Armijo rule with adaptive shrink factor.
+  - sagd: Variant III adaptive step size; requires extra gradient on previous batch to estimate L̂.
+  - silver: scheduled step size based on the silver-ratio schedule.
 - Module D (stability/clip): GGNC optional (future).
 - Module E (outer acceleration): Anderson optional (future).
 - Only one module from B and C at a time; D/E are additive.
@@ -80,8 +89,7 @@ Module interfaces (design intent)
 Paper-accuracy guardrail
 - All module implementations must match their primary paper(s).
 - See project/docs/grad-speedup/method-conformance.md for exact algorithms and references.
-- The current l0l1/eoss rules are placeholders and must be replaced by paper-accurate methods
-  before any results are considered valid.
+- EoSS is treated as a stability/measurement concept, not a step-control optimizer.
 
 Module B requirements (curvature/preconditioning)
 - Module B is exclusive (one choice at a time).
@@ -108,26 +116,26 @@ Config schema (planned)
 - dataset: {name, data_dir, val_size, batch_size, num_workers, seed, download}
 - model: {name}
 - optimizer: {type, lr, momentum, weight_decay}
-- train: {epochs, deterministic, device}
-- logging: {log_interval_steps, eval_interval_epochs, warmup_steps, measure_steps, grad_norm_every}
+- train: {epochs, max_steps, deterministic, device}
+- logging: {log_interval_steps, eval_interval_epochs, eval_interval_steps, warmup_steps, measure_steps, grad_norm_every}
 - targets: [0.85, 0.90, 0.92, 0.94]
 - modules:
-  - step_control: {name, l0, l1, curv_every, curv_eps, eoss_beta, silver_rho}
+  - step_control: {name, l0, l1, fstar, sps_beta, backtrack_c, backtrack_max, backtrack_rho, silver_rho}
   - direction: {name, update_every, eps, damping}
   - clip: {mode, rho}
   - outer: {name, interval, memory, damping}
 
 Experiment matrix (v1)
 - Baselines: SGD, Adam.
-- Module C variants: none, l0l1, eoss.
+- Module C variants: none, l0l1, sps, sps-momentum, adaptive-backtracking, sagd, silver.
 - Module B/D/E are deferred to later tickets.
 
 Experiment matrix (v2 placeholder)
 - Base optimizer: {SGD, Adam} (2)
-- Step control: {none, l0l1, eoss} (3)
+- Step control: {none, l0l1, sps, sps-momentum, adaptive-backtracking, sagd, silver} (7)
 - Clip: {none, ggnc-global, ggnc-layerwise} (3)
 - Outer accel: {none, anderson} (2)
-- Total (example): 2 * 3 * 3 * 2 = 36 (before Module B).
+- Total (example): 2 * 7 * 3 * 2 = 84 (before Module B).
 
 Reporting
 - Per run summary.json should contain per-seed targets with steps/time/cost.

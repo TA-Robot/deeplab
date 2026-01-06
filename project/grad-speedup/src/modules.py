@@ -1,5 +1,13 @@
 """Registry of supported module names for grad-speedup."""
 
-SUPPORTED_STEP_RULES = ("none", "l0l1", "eoss", "silver")
-SUPPORTED_DIRECTIONS = ("none", "diag-precond")
-SUPPORTED_CLIP_MODES = ("none", "global", "layerwise")
+SUPPORTED_STEP_RULES = ("none", "l0l1", "sps", "sps-momentum", "adaptive-backtracking", "sagd", "silver")
+SUPPORTED_DIRECTIONS = ("none", "diag-precond", "shampoo", "soap", "sophia", "muon")
+SUPPORTED_CLIP_MODES = (
+    "none",
+    "global",
+    "layerwise",
+    "ggnc",
+    "ggnc-global",
+    "ggnc-layerwise",
+)
+SUPPORTED_SPARSITY = ("none", "linbreg")

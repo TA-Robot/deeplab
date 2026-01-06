@@ -1,0 +1,4 @@
+# Grad-Speedup run queue (example)
+# One command per line. Lines starting with # are ignored.
+# Example:
+# python -u grad-speedup/scripts/run_cifar10.py --run-id example --model small-cnn --epochs 1 --max-steps 100 --eval-interval-steps 20 --device cpu

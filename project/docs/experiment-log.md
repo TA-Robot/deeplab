@@ -76,14 +76,212 @@
     - 20251230-fast-ros-alth-gpu-cifar10-cnn
     - 20251230-fast-ros-alth-gpu-cifar10-cnn-obl
 
-- 2026-01-05: 20260105-grad-speedup-cifar10-baseline (running)
+- 2026-01-05: 20260105-grad-speedup-cifar10-baseline (completed baseline smoke)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
-  - Status: running (CPU baseline smoke runs)
+  - Status: completed (CPU baseline smoke runs)
   - Notes: baseline sanity checks before paper-accurate modules are integrated.
+  - Artifact location: project/runs/grad-speedup (migrated from /workspace/deeplab/runs/grad-speedup)
   - Run IDs:
     - 20260105-grad-speedup-smallcnn-baseline
     - 20260105-grad-speedup-resnet18-baseline
     - 20260105-grad-speedup-smallcnn-silver
+
+- 2026-01-06: 20260106-grad-speedup-sagd-smoke (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU smoke run)
+  - Notes: SAGD Variant III sanity check on small-cnn, 1 epoch.
+  - Artifact location: project/runs/grad-speedup/20260106-grad-speedup-cifar10-sagd-smoke-smallcnn-gpu
+  - Run IDs:
+    - 20260106-grad-speedup-cifar10-sagd-smoke-smallcnn-gpu
+
+- 2026-01-06: 20260106-grad-speedup-step-control-smoke-suite (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU smoke suite, 1 epoch each)
+  - Notes: small-cnn sweep across baseline + step-control methods.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-cifar10-baseline-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-l0l1-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-sps-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-sps-momentum-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-adaptive-backtracking-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-sagd-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-silver-smoke-smallcnn-gpu
+
+- 2026-01-06: 20260106-grad-speedup-direction-smoke-suite (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU smoke suite, 1 epoch each)
+  - Notes: small-cnn sweep across direction methods (step_rule=none).
+  - Caveat: metrics were invalid due to train-loop indentation bug; rerun required.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-cifar10-direction-none-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-direction-diag-precond-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-direction-shampoo-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-direction-soap-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-direction-sophia-smoke-smallcnn-gpu
+    - 20260106-grad-speedup-cifar10-direction-muon-smoke-smallcnn-gpu
+
+- 2026-01-06: 20260106-grad-speedup-stage3-pairwise (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU combo sweep, 1 epoch each)
+  - Notes: step-control × direction combos for {l0l1, sps, silver} × {none, diag-precond, shampoo, soap, sophia, muon}.
+  - Caveat: metrics were invalid due to train-loop indentation bug; rerun required.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-stage3-l0l1-none-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-l0l1-diag-precond-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-l0l1-shampoo-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-l0l1-soap-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-l0l1-sophia-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-l0l1-muon-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-sps-none-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-sps-diag-precond-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-sps-shampoo-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-sps-soap-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-sps-sophia-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-sps-muon-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-silver-none-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-silver-diag-precond-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-silver-shampoo-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-silver-soap-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-silver-sophia-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-silver-muon-smallcnn-gpu
+
+- 2026-01-06: 20260106-grad-speedup-metricsfix-smoke (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU smoke run)
+  - Notes: verified train metrics after indentation fix.
+  - Artifact location: project/runs/grad-speedup/20260106-grad-speedup-metricsfix-smoke-v2
+  - Run IDs:
+    - 20260106-grad-speedup-metricsfix-smoke-v2
+
+- 2026-01-06: 20260106-grad-speedup-stepcontrol-v2 (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU sweep, 1 epoch each)
+  - Notes: step-control rerun after metrics fix.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-stepcontrol-v2-baseline-smallcnn-gpu
+    - 20260106-grad-speedup-stepcontrol-v2-l0l1-smallcnn-gpu
+    - 20260106-grad-speedup-stepcontrol-v2-sps-smallcnn-gpu
+    - 20260106-grad-speedup-stepcontrol-v2-sps-momentum-smallcnn-gpu
+    - 20260106-grad-speedup-stepcontrol-v2-adaptive-backtracking-smallcnn-gpu
+    - 20260106-grad-speedup-stepcontrol-v2-sagd-smallcnn-gpu
+    - 20260106-grad-speedup-stepcontrol-v2-silver-smallcnn-gpu
+
+- 2026-01-06: 20260106-grad-speedup-direction-v2 (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU sweep, 1 epoch each)
+  - Notes: direction rerun after metrics fix (step_rule=none).
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-direction-v2-none-smallcnn-gpu
+    - 20260106-grad-speedup-direction-v2-diag-precond-smallcnn-gpu
+    - 20260106-grad-speedup-direction-v2-shampoo-smallcnn-gpu
+    - 20260106-grad-speedup-direction-v2-soap-smallcnn-gpu
+    - 20260106-grad-speedup-direction-v2-sophia-smallcnn-gpu
+    - 20260106-grad-speedup-direction-v2-muon-smallcnn-gpu
+
+- 2026-01-06: 20260106-grad-speedup-stage3-v2 (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU combo sweep, 1 epoch each)
+  - Notes: Stage3 pairwise combos rerun after metrics fix.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-stage3-v2-l0l1-none-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-l0l1-diag-precond-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-l0l1-shampoo-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-l0l1-soap-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-l0l1-sophia-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-l0l1-muon-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-sps-none-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-sps-diag-precond-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-sps-shampoo-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-sps-soap-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-sps-sophia-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-sps-muon-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-silver-none-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-silver-diag-precond-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-silver-shampoo-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-silver-soap-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-silver-sophia-smallcnn-gpu
+    - 20260106-grad-speedup-stage3-v2-silver-muon-smallcnn-gpu
+
+- 2026-01-06: 20260106-grad-speedup-stage4 (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU clip/outer sweep, 1 epoch each)
+  - Notes: Stage4 sweep over clip/outer for top pair (l0l1 + soap).
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-stage4-l0l1-soap-none-none-smallcnn-gpu
+    - 20260106-grad-speedup-stage4-l0l1-soap-none-anderson-smallcnn-gpu
+    - 20260106-grad-speedup-stage4-l0l1-soap-ggnc-global-none-smallcnn-gpu
+    - 20260106-grad-speedup-stage4-l0l1-soap-ggnc-global-anderson-smallcnn-gpu
+    - 20260106-grad-speedup-stage4-l0l1-soap-ggnc-layerwise-none-smallcnn-gpu
+    - 20260106-grad-speedup-stage4-l0l1-soap-ggnc-layerwise-anderson-smallcnn-gpu
+
+- 2026-01-06: 20260106-grad-speedup-stage5-resnet18 (in progress)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (multi-seed, 5 epochs)
+  - Notes: promotion runs for baseline vs Stage4 winner (l0l1+soap+anderson). Preliminary epoch5 test acc (mean±std, n=3): baseline 0.675±0.040; l0l1+soap+anderson 0.847±0.011.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-stage5-baseline-resnet18-seeds012
+    - 20260106-grad-speedup-stage5-l0l1-soap-anderson-resnet18-seeds012
+
+- 2026-01-06: 20260106-grad-speedup-stage6-resnet18-ep20 (in progress)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: in progress (multi-seed, 20 epochs)
+  - Notes: baseline completed; winner (l0l1+soap+anderson) seed-0 done; seeds 1/2 running.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-stage6-baseline-resnet18-ep20-seeds012
+    - 20260106-grad-speedup-stage6-l0l1-soap-anderson-resnet18-ep20-seeds012
+
+- 2026-01-06: grad-speedup experiments paused for step-based control
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: paused (pending max_steps/eval_interval_steps rollout)
+  - Notes: step-based defaults set to max_steps=14,000 and eval_interval_steps=1000; epoch-based runs may be re-run.
+
+- 2026-01-06: grad-speedup run artifacts reset (step-based migration)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed
+  - Notes: pre-step-based artifacts under project/runs/grad-speedup were deleted; all future results will use max_steps=14,000 and eval_interval_steps=1000.
+
+- 2026-01-06: 20260106-grad-speedup-step-smoke (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (CPU smoke, step-based eval)
+  - Notes: max_steps=10, eval_interval_steps=5; verified test eval entries at steps 5 and 10.
+  - Artifact location: project/runs/grad-speedup/20260106-grad-speedup-step-smoke
+  - Run IDs:
+    - 20260106-grad-speedup-step-smoke
+
+- 2026-01-06: 20260106-grad-speedup-step-baseline-resnet18-maxsteps14000-seeds012 (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU, step-based)
+  - Notes: max_steps=14,000; eval_interval_steps=1000; eval_interval_epochs=0.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-step-baseline-resnet18-maxsteps14000-seeds012
+
+- 2026-01-06: 20260106-grad-speedup-step-l0l1-soap-anderson-resnet18-maxsteps14000-seeds012 (running)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: running (GPU, step-based)
+  - Notes: max_steps=14,000; eval_interval_steps=1000; eval_interval_epochs=0.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-step-l0l1-soap-anderson-resnet18-maxsteps14000-seeds012
+
+- 2026-01-06: Step-based ablations (queued)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: queued (auto-start after winner)
+  - Notes: max_steps=14,000; eval_interval_steps=1000; eval_interval_epochs=0.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-step-l0l1-only-resnet18-maxsteps14000-seeds012
+    - 20260106-grad-speedup-step-soap-only-resnet18-maxsteps14000-seeds012
+    - 20260106-grad-speedup-step-l0l1-soap-resnet18-maxsteps14000-seeds012
 
 - 2025-12-29: 20251229-ros-alth-mnist-cpu (superseded)
   - Brief: project/docs/experiment-20251229-ros-alth-mnist-cpu.md

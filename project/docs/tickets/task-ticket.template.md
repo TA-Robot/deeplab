@@ -10,7 +10,9 @@
 
 ## 0) How to Use（運用手順）
 
-1. `project/docs/tickets/task-ticket.template.md` を `project/docs/tickets/ready/` にコピーする
+1. `project/docs/tickets/task-ticket.template.md` を対象のチケット置き場にコピーする
+   - grad-speedup: `project/docs/grad-speedup/tickets/ready/`
+   - それ以外: `project/docs/tickets/ready/`
 2. このチケットを **最後まで埋める**（未確定は “未確定” と明示する）
 3. サブエージェント起動時に `cat ticket.md | codex-second-agent ... -` で渡す
 4. 起動したら `running/` に移動し、完了したら `done/` に移動して履歴として残す（原則削除しない）

@@ -4,6 +4,10 @@
 .codex-second-agent/
 __pycache__/
 *.pyc
+.venv/
+.vscode/
+temp
+project/grad-speedup/queue/queue.txt
 project/runs/
 !project/runs/.gitkeep
 project/data/

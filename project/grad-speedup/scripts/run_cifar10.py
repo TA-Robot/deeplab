@@ -27,12 +27,14 @@ from src.train import EvalMetrics, StepLog, TrainMetrics, evaluate, set_seed, tr
 
 MODEL_CHOICES = ("resnet18", "small-cnn")
 OPT_CHOICES = ("sgd", "adam")
+MUON_SCALE_CHOICES = ("none", "baseline", "update-norm", "adjusted-lr")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Grad-speedup CIFAR-10 runner")
     parser.add_argument("--model", choices=MODEL_CHOICES, default="resnet18")
     parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--max-steps", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=0.1)
     parser.add_argument("--optimizer", choices=OPT_CHOICES, default="sgd")
@@ -52,24 +54,60 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--download", action="store_true")
     parser.add_argument("--log-interval-steps", type=int, default=100)
     parser.add_argument("--eval-interval-epochs", type=int, default=1)
+    parser.add_argument("--eval-interval-steps", type=int, default=0)
     parser.add_argument("--target-acc", type=str, default="0.85,0.90,0.92,0.94")
     parser.add_argument("--early-stop", choices=("max", "first"), default="max")
     parser.add_argument("--warmup-steps", type=int, default=50)
     parser.add_argument("--measure-steps", type=int, default=200)
     parser.add_argument("--grad-norm-every", type=int, default=0)
-    parser.add_argument("--step-rule", choices=("none", "l0l1", "eoss", "silver"), default="none")
+    parser.add_argument(
+        "--step-rule",
+        choices=("none", "l0l1", "sps", "sps-momentum", "adaptive-backtracking", "sagd", "silver"),
+        default="none",
+    )
     parser.add_argument("--step-l0", type=float, default=1.0)
     parser.add_argument("--step-l1", type=float, default=0.0)
-    parser.add_argument("--step-curv-every", type=int, default=50)
-    parser.add_argument("--step-curv-eps", type=float, default=1e-8)
-    parser.add_argument("--step-eoss-beta", type=float, default=1.0)
+    parser.add_argument("--step-fstar", type=float, default=0.0)
+    parser.add_argument("--step-sps-beta", type=float, default=0.9)
+    parser.add_argument("--step-sps-c", type=float, default=1.0)
+    parser.add_argument("--step-sps-max", type=float, default=None)
+    parser.add_argument("--step-backtrack-c", type=float, default=0.1)
+    parser.add_argument("--step-backtrack-max", type=int, default=10)
+    parser.add_argument("--step-backtrack-rho", type=float, default=0.5)
     parser.add_argument("--step-silver-rho", type=float, default=2.414213562373095)
-    parser.add_argument("--direction", choices=("none", "diag-precond"), default="none")
+    parser.add_argument("--step-sagd-delta", type=float, default=1e-2)
+    parser.add_argument(
+        "--direction",
+        choices=("none", "diag-precond", "shampoo", "soap", "sophia", "muon"),
+        default="none",
+    )
     parser.add_argument("--direction-beta", type=float, default=0.9)
+    parser.add_argument("--direction-beta1", type=float, default=0.9)
     parser.add_argument("--direction-eps", type=float, default=1e-8)
+    parser.add_argument("--direction-damping", type=float, default=1e-5)
     parser.add_argument("--direction-update-every", type=int, default=1)
-    parser.add_argument("--clip-mode", choices=("none", "global", "layerwise"), default="none")
+    parser.add_argument("--sophia-beta1", type=float, default=0.96)
+    parser.add_argument("--sophia-beta2", type=float, default=0.99)
+    parser.add_argument("--sophia-gamma", "--sophia-rho", dest="sophia_gamma", type=float, default=0.01)
+    parser.add_argument("--sophia-eps", type=float, default=1e-12)
+    parser.add_argument("--sophia-hessian-every", type=int, default=10)
+    parser.add_argument("--sophia-hutchinson-samples", type=int, default=1)
+    parser.add_argument("--muon-beta", type=float, default=0.95)
+    parser.add_argument("--muon-eps", type=float, default=1e-8)
+    parser.add_argument("--muon-ns-iters", type=int, default=5)
+    parser.add_argument("--muon-scale-mode", choices=MUON_SCALE_CHOICES, default="adjusted-lr")
+    parser.add_argument("--muon-rms-scale", type=float, default=0.2)
+    parser.add_argument("--muon-hidden-size", type=int, default=0)
+    parser.add_argument(
+        "--clip-mode",
+        choices=("none", "ggnc", "ggnc-global", "ggnc-layerwise", "global", "layerwise"),
+        default="none",
+    )
     parser.add_argument("--clip-rho", type=float, default=1.0)
+    parser.add_argument("--clip-alpha", type=float, default=1.0)
+    parser.add_argument("--sparsity", choices=("none", "linbreg"), default="none")
+    parser.add_argument("--sparsity-lambda", type=float, default=0.0)
+    parser.add_argument("--sparsity-update-interval", type=int, default=1)
     parser.add_argument("--anderson-memory", type=int, default=0)
     parser.add_argument("--anderson-interval", type=int, default=0)
     parser.add_argument("--anderson-damping", type=float, default=0.5)
@@ -152,6 +190,8 @@ def apply_config(args: argparse.Namespace, defaults: Dict[str, Any], config: Dic
     if train:
         if "epochs" in train:
             _set_if_default(args, defaults, "epochs", train["epochs"])
+        if "max_steps" in train:
+            _set_if_default(args, defaults, "max_steps", train["max_steps"])
         if "deterministic" in train:
             _set_if_default(args, defaults, "deterministic", train["deterministic"])
         if "device" in train:
@@ -166,6 +206,8 @@ def apply_config(args: argparse.Namespace, defaults: Dict[str, Any], config: Dic
             _set_if_default(args, defaults, "log_interval_steps", logging_cfg["log_interval_steps"])
         if "eval_interval_epochs" in logging_cfg:
             _set_if_default(args, defaults, "eval_interval_epochs", logging_cfg["eval_interval_epochs"])
+        if "eval_interval_steps" in logging_cfg:
+            _set_if_default(args, defaults, "eval_interval_steps", logging_cfg["eval_interval_steps"])
         if "warmup_steps" in logging_cfg:
             _set_if_default(args, defaults, "warmup_steps", logging_cfg["warmup_steps"])
         if "measure_steps" in logging_cfg:
@@ -186,14 +228,24 @@ def apply_config(args: argparse.Namespace, defaults: Dict[str, Any], config: Dic
             _set_if_default(args, defaults, "step_l0", step_control["l0"])
         if "l1" in step_control:
             _set_if_default(args, defaults, "step_l1", step_control["l1"])
-        if "curv_every" in step_control:
-            _set_if_default(args, defaults, "step_curv_every", step_control["curv_every"])
-        if "curv_eps" in step_control:
-            _set_if_default(args, defaults, "step_curv_eps", step_control["curv_eps"])
-        if "eoss_beta" in step_control:
-            _set_if_default(args, defaults, "step_eoss_beta", step_control["eoss_beta"])
+        if "fstar" in step_control:
+            _set_if_default(args, defaults, "step_fstar", step_control["fstar"])
+        if "sps_beta" in step_control:
+            _set_if_default(args, defaults, "step_sps_beta", step_control["sps_beta"])
+        if "sps_c" in step_control:
+            _set_if_default(args, defaults, "step_sps_c", step_control["sps_c"])
+        if "sps_max" in step_control:
+            _set_if_default(args, defaults, "step_sps_max", step_control["sps_max"])
+        if "backtrack_c" in step_control:
+            _set_if_default(args, defaults, "step_backtrack_c", step_control["backtrack_c"])
+        if "backtrack_max" in step_control:
+            _set_if_default(args, defaults, "step_backtrack_max", step_control["backtrack_max"])
+        if "backtrack_rho" in step_control:
+            _set_if_default(args, defaults, "step_backtrack_rho", step_control["backtrack_rho"])
         if "silver_rho" in step_control:
             _set_if_default(args, defaults, "step_silver_rho", step_control["silver_rho"])
+        if "sagd_delta" in step_control:
+            _set_if_default(args, defaults, "step_sagd_delta", step_control["sagd_delta"])
 
     direction = modules.get("direction", {})
     if direction:
@@ -201,10 +253,40 @@ def apply_config(args: argparse.Namespace, defaults: Dict[str, Any], config: Dic
             _set_if_default(args, defaults, "direction", direction["name"])
         if "beta" in direction:
             _set_if_default(args, defaults, "direction_beta", direction["beta"])
+        if "beta1" in direction:
+            _set_if_default(args, defaults, "direction_beta1", direction["beta1"])
         if "eps" in direction:
             _set_if_default(args, defaults, "direction_eps", direction["eps"])
+        if "damping" in direction:
+            _set_if_default(args, defaults, "direction_damping", direction["damping"])
         if "update_every" in direction:
             _set_if_default(args, defaults, "direction_update_every", direction["update_every"])
+        if "sophia_beta1" in direction:
+            _set_if_default(args, defaults, "sophia_beta1", direction["sophia_beta1"])
+        if "sophia_beta2" in direction:
+            _set_if_default(args, defaults, "sophia_beta2", direction["sophia_beta2"])
+        if "sophia_gamma" in direction:
+            _set_if_default(args, defaults, "sophia_gamma", direction["sophia_gamma"])
+        if "sophia_rho" in direction:
+            _set_if_default(args, defaults, "sophia_gamma", direction["sophia_rho"])
+        if "sophia_eps" in direction:
+            _set_if_default(args, defaults, "sophia_eps", direction["sophia_eps"])
+        if "sophia_hessian_every" in direction:
+            _set_if_default(args, defaults, "sophia_hessian_every", direction["sophia_hessian_every"])
+        if "sophia_hutchinson_samples" in direction:
+            _set_if_default(args, defaults, "sophia_hutchinson_samples", direction["sophia_hutchinson_samples"])
+        if "muon_beta" in direction:
+            _set_if_default(args, defaults, "muon_beta", direction["muon_beta"])
+        if "muon_eps" in direction:
+            _set_if_default(args, defaults, "muon_eps", direction["muon_eps"])
+        if "muon_ns_iters" in direction:
+            _set_if_default(args, defaults, "muon_ns_iters", direction["muon_ns_iters"])
+        if "muon_scale_mode" in direction:
+            _set_if_default(args, defaults, "muon_scale_mode", direction["muon_scale_mode"])
+        if "muon_rms_scale" in direction:
+            _set_if_default(args, defaults, "muon_rms_scale", direction["muon_rms_scale"])
+        if "muon_hidden_size" in direction:
+            _set_if_default(args, defaults, "muon_hidden_size", direction["muon_hidden_size"])
 
     clip = modules.get("clip", {})
     if clip:
@@ -212,6 +294,17 @@ def apply_config(args: argparse.Namespace, defaults: Dict[str, Any], config: Dic
             _set_if_default(args, defaults, "clip_mode", clip["mode"])
         if "rho" in clip:
             _set_if_default(args, defaults, "clip_rho", clip["rho"])
+        if "alpha" in clip:
+            _set_if_default(args, defaults, "clip_alpha", clip["alpha"])
+
+    sparsity = modules.get("sparsity", {})
+    if sparsity:
+        if "name" in sparsity:
+            _set_if_default(args, defaults, "sparsity", sparsity["name"])
+        if "lambda" in sparsity:
+            _set_if_default(args, defaults, "sparsity_lambda", sparsity["lambda"])
+        if "update_interval" in sparsity:
+            _set_if_default(args, defaults, "sparsity_update_interval", sparsity["update_interval"])
 
     outer = modules.get("outer", {})
     if outer:
@@ -279,9 +372,12 @@ def log_step(path: Path, log: StepLog) -> None:
         "loss": log.loss,
         "accuracy": log.accuracy,
         "lr": log.lr,
+        "step_size": log.step_size,
         "grad_norm": log.grad_norm,
         "curvature": log.curvature,
         "step_time_ms": log.step_time_ms,
+        "line_search_iters": log.line_search_iters,
+        "line_search_accepted": log.line_search_accepted,
     }
     append_jsonl(path, payload)
 
@@ -302,6 +398,9 @@ def log_epoch(path: Path, split: str, epoch: int, global_step: int, metrics: Tra
                 "step_time_ms": metrics.step_time_ms,
                 "throughput": metrics.throughput,
                 "steps": metrics.steps,
+                "step_size_mean": metrics.step_size_mean,
+                "step_size_p50": metrics.step_size_p50,
+                "step_size_p90": metrics.step_size_p90,
                 "grad_norm_mean": metrics.grad_norm_mean,
                 "grad_norm_p50": metrics.grad_norm_p50,
                 "grad_norm_p90": metrics.grad_norm_p90,
@@ -314,10 +413,36 @@ def log_epoch(path: Path, split: str, epoch: int, global_step: int, metrics: Tra
                 "clip_coef_mean": metrics.clip_coef_mean,
                 "clip_coef_p50": metrics.clip_coef_p50,
                 "clip_coef_p90": metrics.clip_coef_p90,
+                "sophia_hessian_mean": metrics.sophia_hessian_mean,
+                "sophia_hessian_p50": metrics.sophia_hessian_p50,
+                "sophia_hessian_p90": metrics.sophia_hessian_p90,
+                "sophia_clip_frac_mean": metrics.sophia_clip_frac_mean,
+                "sophia_clip_frac_p50": metrics.sophia_clip_frac_p50,
+                "sophia_clip_frac_p90": metrics.sophia_clip_frac_p90,
+                "muon_ortho_iters_mean": metrics.muon_ortho_iters_mean,
+                "muon_ortho_iters_p50": metrics.muon_ortho_iters_p50,
+                "muon_ortho_iters_p90": metrics.muon_ortho_iters_p90,
+                "line_search_attempts": metrics.line_search_attempts,
+                "line_search_accepted": metrics.line_search_accepted,
+                "line_search_rejected": metrics.line_search_rejected,
+                "line_search_iters_mean": metrics.line_search_iters_mean,
+                "line_search_iters_p50": metrics.line_search_iters_p50,
+                "line_search_iters_p90": metrics.line_search_iters_p90,
+                "precond_update_count": metrics.precond_update_count,
+                "precond_apply_count": metrics.precond_apply_count,
+                "precond_update_time_s": metrics.precond_update_time_s,
+                "precond_apply_time_s": metrics.precond_apply_time_s,
+                "precond_layer_stats": metrics.precond_layer_stats,
                 "anderson_applied": metrics.anderson_applied,
                 "anderson_failed": metrics.anderson_failed,
                 "data_wait_time_s": metrics.data_wait_time_s,
                 "max_memory_bytes": metrics.max_memory_bytes,
+                "sparsity_fraction": metrics.sparsity_fraction,
+                "dense_flops": metrics.dense_flops,
+                "effective_flops": metrics.effective_flops,
+                "sparsity_updates": metrics.sparsity_updates,
+                "sparsity_update_interval": metrics.sparsity_update_interval,
+                "sparsity_update_rate": metrics.sparsity_update_rate,
             }
         )
     append_jsonl(path, payload)
@@ -399,6 +524,7 @@ def main() -> int:
         "model": args.model,
         "optimizer": args.optimizer,
         "epochs": args.epochs,
+        "max_steps": args.max_steps,
         "batch_size": args.batch_size,
         "lr": args.lr,
         "momentum": args.momentum,
@@ -414,6 +540,7 @@ def main() -> int:
         "data_dir": args.data_dir,
         "log_interval_steps": args.log_interval_steps,
         "eval_interval_epochs": args.eval_interval_epochs,
+        "eval_interval_steps": args.eval_interval_steps,
         "targets": targets,
         "early_stop": args.early_stop,
         "warmup_steps": args.warmup_steps,
@@ -422,15 +549,38 @@ def main() -> int:
         "step_rule": args.step_rule,
         "step_l0": args.step_l0,
         "step_l1": args.step_l1,
-        "step_curv_every": args.step_curv_every,
-        "step_curv_eps": args.step_curv_eps,
-        "step_eoss_beta": args.step_eoss_beta,
+        "step_fstar": args.step_fstar,
+        "step_sps_beta": args.step_sps_beta,
+        "step_sps_c": args.step_sps_c,
+        "step_sps_max": args.step_sps_max,
+        "step_backtrack_c": args.step_backtrack_c,
+        "step_backtrack_max": args.step_backtrack_max,
+        "step_backtrack_rho": args.step_backtrack_rho,
+        "step_silver_rho": args.step_silver_rho,
         "direction": args.direction,
         "direction_beta": args.direction_beta,
+        "direction_beta1": args.direction_beta1,
         "direction_eps": args.direction_eps,
+        "direction_damping": args.direction_damping,
         "direction_update_every": args.direction_update_every,
+        "sophia_beta1": args.sophia_beta1,
+        "sophia_beta2": args.sophia_beta2,
+        "sophia_gamma": args.sophia_gamma,
+        "sophia_eps": args.sophia_eps,
+        "sophia_hessian_every": args.sophia_hessian_every,
+        "sophia_hutchinson_samples": args.sophia_hutchinson_samples,
+        "muon_beta": args.muon_beta,
+        "muon_eps": args.muon_eps,
+        "muon_ns_iters": args.muon_ns_iters,
+        "muon_scale_mode": args.muon_scale_mode,
+        "muon_rms_scale": args.muon_rms_scale,
+        "muon_hidden_size": args.muon_hidden_size,
         "clip_mode": args.clip_mode,
         "clip_rho": args.clip_rho,
+        "clip_alpha": args.clip_alpha,
+        "sparsity": args.sparsity,
+        "sparsity_lambda": args.sparsity_lambda,
+        "sparsity_update_interval": args.sparsity_update_interval,
         "anderson_memory": args.anderson_memory,
         "anderson_interval": args.anderson_interval,
         "anderson_damping": args.anderson_damping,
@@ -476,11 +626,42 @@ def main() -> int:
         anderson_state: list[tuple[torch.Tensor, torch.Tensor]] = []
         targets_hit: Dict[float, Optional[Dict[str, float]]] = {t: None for t in targets}
         max_target = max(targets) if targets else None
+        last_eval_step: Optional[int] = None
 
         total_step_time_s = 0.0
         total_step_count = 0
 
+        def _record_eval(step: int, eval_epoch: int) -> EvalMetrics:
+            nonlocal last_eval_step
+            was_training = model.training
+            eval_metrics = evaluate(model, test_loader, device)
+            if was_training:
+                model.train()
+            log_epoch(metrics_path, "test", eval_epoch, step, eval_metrics)
+            last_eval_step = step
+
+            elapsed = time.perf_counter() - run_start
+            for target in targets:
+                if targets_hit[target] is not None:
+                    continue
+                if eval_metrics.accuracy >= target:
+                    targets_hit[target] = {
+                        "steps": step,
+                        "time_sec": float(elapsed),
+                        "accuracy": float(eval_metrics.accuracy),
+                        "epoch": eval_epoch,
+                    }
+            return eval_metrics
+
+        def _on_step_end(step: int, step_epoch: int, _step_in_epoch: int) -> bool:
+            if args.eval_interval_steps > 0 and step % args.eval_interval_steps == 0:
+                if last_eval_step != step:
+                    _record_eval(step, step_epoch)
+            return args.max_steps > 0 and step >= args.max_steps
+
         for epoch in range(1, args.epochs + 1):
+            if args.max_steps > 0 and global_step >= args.max_steps:
+                break
             epoch_start = time.perf_counter()
 
             def _log_fn(step_log: StepLog) -> None:
@@ -495,22 +676,46 @@ def main() -> int:
                 global_step=global_step,
                 log_interval=args.log_interval_steps,
                 log_fn=_log_fn,
+                on_step_end=_on_step_end,
                 warmup_steps=args.warmup_steps,
                 measure_steps=args.measure_steps,
                 grad_norm_every=args.grad_norm_every,
                 step_rule=args.step_rule,
                 step_l0=args.step_l0,
                 step_l1=args.step_l1,
-                step_curv_every=args.step_curv_every,
-                step_curv_eps=args.step_curv_eps,
-                step_eoss_beta=args.step_eoss_beta,
+                step_fstar=args.step_fstar,
+                step_sps_beta=args.step_sps_beta,
+                step_sps_c=args.step_sps_c,
+                step_sps_max=args.step_sps_max,
+                step_backtrack_c=args.step_backtrack_c,
+                step_backtrack_max=args.step_backtrack_max,
+                step_backtrack_rho=args.step_backtrack_rho,
                 step_silver_rho=args.step_silver_rho,
+                step_sagd_delta=args.step_sagd_delta,
                 direction=args.direction,
                 direction_beta=args.direction_beta,
                 direction_eps=args.direction_eps,
+                direction_beta1=args.direction_beta1,
+                direction_damping=args.direction_damping,
                 direction_update_every=args.direction_update_every,
+                sophia_beta1=args.sophia_beta1,
+                sophia_beta2=args.sophia_beta2,
+                sophia_gamma=args.sophia_gamma,
+                sophia_eps=args.sophia_eps,
+                sophia_hessian_every=args.sophia_hessian_every,
+                sophia_hutchinson_samples=args.sophia_hutchinson_samples,
+                muon_beta=args.muon_beta,
+                muon_eps=args.muon_eps,
+                muon_ns_iters=args.muon_ns_iters,
+                muon_scale_mode=args.muon_scale_mode,
+                muon_rms_scale=args.muon_rms_scale,
+                muon_hidden_size=args.muon_hidden_size,
                 clip_mode=args.clip_mode,
                 clip_rho=args.clip_rho,
+                clip_alpha=args.clip_alpha,
+                sparsity=args.sparsity,
+                sparsity_lambda=args.sparsity_lambda,
+                sparsity_update_interval=args.sparsity_update_interval,
                 anderson_memory=args.anderson_memory,
                 anderson_interval=args.anderson_interval,
                 anderson_damping=args.anderson_damping,
@@ -523,22 +728,9 @@ def main() -> int:
             total_step_time_s += train_metrics.step_time_total_s
             total_step_count += train_metrics.step_time_count
 
-            eval_metrics: Optional[EvalMetrics] = None
             if args.eval_interval_epochs > 0 and epoch % args.eval_interval_epochs == 0:
-                eval_metrics = evaluate(model, test_loader, device)
-                log_epoch(metrics_path, "test", epoch, global_step, eval_metrics)
-
-                elapsed = time.perf_counter() - run_start
-                for target in targets:
-                    if targets_hit[target] is not None:
-                        continue
-                    if eval_metrics.accuracy >= target:
-                        targets_hit[target] = {
-                            "steps": global_step,
-                            "time_sec": float(elapsed),
-                            "accuracy": float(eval_metrics.accuracy),
-                            "epoch": epoch,
-                        }
+                if last_eval_step != global_step:
+                    _record_eval(global_step, epoch)
 
             epoch_time_sec = time.perf_counter() - epoch_start
             append_jsonl(
@@ -555,6 +747,8 @@ def main() -> int:
                 if any(v is not None for v in targets_hit.values()):
                     break
             elif max_target is not None and targets_hit.get(max_target) is not None:
+                break
+            if args.max_steps > 0 and global_step >= args.max_steps:
                 break
 
         mean_step_time_sec = None

@@ -89,39 +89,77 @@ def main() -> int:
     }
     configs.append(("baseline-adam.json", adam))
 
-    # Module C: l0l1 on SGD (legacy placeholder)
+    # Module C: L0L1-GD on SGD
     l0l1 = base_config(args)
     l0l1["optimizer"] = {
         "type": "sgd",
         "lr": 0.1,
-        "momentum": 0.9,
+        "momentum": 0.0,
         "weight_decay": 5e-4,
     }
     l0l1["modules"]["step_control"] = {"name": "l0l1", "l0": 1.0, "l1": 0.1}
-    configs.append(("legacy-modc-l0l1-sgd.json", l0l1))
+    configs.append(("modc-l0l1-sgd.json", l0l1))
 
-    # Module C: eoss on SGD (legacy placeholder)
-    eoss = base_config(args)
-    eoss["optimizer"] = {
+    # Module C: SPS on SGD
+    sps = base_config(args)
+    sps["optimizer"] = {
         "type": "sgd",
         "lr": 0.1,
-        "momentum": 0.9,
+        "momentum": 0.0,
         "weight_decay": 5e-4,
     }
-    eoss["modules"]["step_control"] = {
-        "name": "eoss",
-        "curv_every": 50,
-        "curv_eps": 1e-8,
-        "eoss_beta": 1.0,
+    sps["modules"]["step_control"] = {"name": "sps", "fstar": 0.0}
+    configs.append(("modc-sps-sgd.json", sps))
+
+    # Module C: SPS + momentum on SGD
+    sps_momentum = base_config(args)
+    sps_momentum["optimizer"] = {
+        "type": "sgd",
+        "lr": 0.1,
+        "momentum": 0.0,
+        "weight_decay": 5e-4,
     }
-    configs.append(("legacy-modc-eoss-sgd.json", eoss))
+    sps_momentum["modules"]["step_control"] = {
+        "name": "sps-momentum",
+        "fstar": 0.0,
+        "sps_beta": 0.9,
+        "sps_c": 1.0,
+    }
+    configs.append(("modc-sps-momentum-sgd.json", sps_momentum))
+
+    # Module C: adaptive backtracking on SGD
+    backtrack = base_config(args)
+    backtrack["optimizer"] = {
+        "type": "sgd",
+        "lr": 0.1,
+        "momentum": 0.0,
+        "weight_decay": 5e-4,
+    }
+    backtrack["modules"]["step_control"] = {
+        "name": "adaptive-backtracking",
+        "backtrack_c": 0.1,
+        "backtrack_max": 10,
+        "backtrack_rho": 0.5,
+    }
+    configs.append(("modc-adaptive-backtracking-sgd.json", backtrack))
+
+    # Module C: stochastic adaptive GD without descent on SGD
+    sagd = base_config(args)
+    sagd["optimizer"] = {
+        "type": "sgd",
+        "lr": 1e-3,
+        "momentum": 0.0,
+        "weight_decay": 5e-4,
+    }
+    sagd["modules"]["step_control"] = {"name": "sagd", "sagd_delta": 1e-2}
+    configs.append(("modc-sagd-sgd.json", sagd))
 
     # Module C: silver stepsizes on SGD
     silver = base_config(args)
     silver["optimizer"] = {
         "type": "sgd",
         "lr": 0.1,
-        "momentum": 0.9,
+        "momentum": 0.0,
         "weight_decay": 5e-4,
     }
     silver["modules"]["step_control"] = {"name": "silver", "silver_rho": 2.414213562373095}
