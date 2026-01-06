@@ -6,7 +6,7 @@ Owner: PM
 Current state
 - Spec alignment: updated plan/system/combination docs to the CIFAR-10 spec (72-condition grid).
 - Base-grid methods: Backtracking/GGNC/Anderson/LinBreg exist but need spec validation; EoSS implementation pending.
-- Direction track: Layerwise GN ticket created; SOAP heavy runs treated as legacy and out-of-scope for base grid.
+- Direction track: Layerwise GN ticket created; SOAP is deprioritized (legacy only).
 - Dashboard: Dash UI in place; supports time/steps/cost-to-target with legend table.
 
 Primary docs
