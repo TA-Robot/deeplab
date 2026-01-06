@@ -62,9 +62,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--grad-norm-every", type=int, default=0)
     parser.add_argument(
         "--step-rule",
-        choices=("none", "l0l1", "sps", "sps-momentum", "adaptive-backtracking", "sagd", "silver"),
+        choices=("none", "eoss", "l0l1", "sps", "sps-momentum", "adaptive-backtracking", "sagd", "silver"),
         default="none",
     )
+    parser.add_argument("--step-eoss-beta", type=float, default=None)
+    parser.add_argument("--step-eoss-ema", type=float, default=0.9)
+    parser.add_argument("--step-eoss-interval", type=int, default=10)
+    parser.add_argument("--step-eoss-eps", type=float, default=1e-8)
+    parser.add_argument("--step-eoss-clip-min", type=float, default=1e-5)
+    parser.add_argument("--step-eoss-clip-max", type=float, default=1.0)
     parser.add_argument("--step-l0", type=float, default=1.0)
     parser.add_argument("--step-l1", type=float, default=0.0)
     parser.add_argument("--step-fstar", type=float, default=0.0)
@@ -224,6 +230,18 @@ def apply_config(args: argparse.Namespace, defaults: Dict[str, Any], config: Dic
     if step_control:
         if "name" in step_control:
             _set_if_default(args, defaults, "step_rule", step_control["name"])
+        if "beta" in step_control:
+            _set_if_default(args, defaults, "step_eoss_beta", step_control["beta"])
+        if "ema" in step_control:
+            _set_if_default(args, defaults, "step_eoss_ema", step_control["ema"])
+        if "interval" in step_control:
+            _set_if_default(args, defaults, "step_eoss_interval", step_control["interval"])
+        if "eps" in step_control:
+            _set_if_default(args, defaults, "step_eoss_eps", step_control["eps"])
+        if "clip_min" in step_control:
+            _set_if_default(args, defaults, "step_eoss_clip_min", step_control["clip_min"])
+        if "clip_max" in step_control:
+            _set_if_default(args, defaults, "step_eoss_clip_max", step_control["clip_max"])
         if "l0" in step_control:
             _set_if_default(args, defaults, "step_l0", step_control["l0"])
         if "l1" in step_control:
@@ -494,6 +512,9 @@ def main() -> int:
     if args.num_threads > 0:
         torch.set_num_threads(args.num_threads)
 
+    if args.step_eoss_beta is None:
+        args.step_eoss_beta = args.lr
+
     device = setup_device(args.device)
     if args.deterministic and device.type == "cuda":
         os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -547,6 +568,12 @@ def main() -> int:
         "measure_steps": args.measure_steps,
         "grad_norm_every": args.grad_norm_every,
         "step_rule": args.step_rule,
+        "step_eoss_beta": args.step_eoss_beta,
+        "step_eoss_ema": args.step_eoss_ema,
+        "step_eoss_interval": args.step_eoss_interval,
+        "step_eoss_eps": args.step_eoss_eps,
+        "step_eoss_clip_min": args.step_eoss_clip_min,
+        "step_eoss_clip_max": args.step_eoss_clip_max,
         "step_l0": args.step_l0,
         "step_l1": args.step_l1,
         "step_fstar": args.step_fstar,
@@ -681,6 +708,12 @@ def main() -> int:
                 measure_steps=args.measure_steps,
                 grad_norm_every=args.grad_norm_every,
                 step_rule=args.step_rule,
+                step_eoss_beta=args.step_eoss_beta,
+                step_eoss_ema=args.step_eoss_ema,
+                step_eoss_interval=args.step_eoss_interval,
+                step_eoss_eps=args.step_eoss_eps,
+                step_eoss_clip_min=args.step_eoss_clip_min,
+                step_eoss_clip_max=args.step_eoss_clip_max,
                 step_l0=args.step_l0,
                 step_l1=args.step_l1,
                 step_fstar=args.step_fstar,

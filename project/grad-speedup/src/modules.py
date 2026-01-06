@@ -1,6 +1,6 @@
 """Registry of supported module names for grad-speedup."""
 
-SUPPORTED_STEP_RULES = ("none", "l0l1", "sps", "sps-momentum", "adaptive-backtracking", "sagd", "silver")
+SUPPORTED_STEP_RULES = ("none", "eoss", "l0l1", "sps", "sps-momentum", "adaptive-backtracking", "sagd", "silver")
 SUPPORTED_DIRECTIONS = ("none", "diag-precond", "shampoo", "soap", "sophia", "muon")
 SUPPORTED_CLIP_MODES = (
     "none",

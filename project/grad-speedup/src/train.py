@@ -515,6 +515,12 @@ def train_one_epoch(
     measure_steps: int = 200,
     grad_norm_every: int = 0,
     step_rule: str = "none",
+    step_eoss_beta: Optional[float] = None,
+    step_eoss_ema: float = 0.9,
+    step_eoss_interval: int = 10,
+    step_eoss_eps: float = 1e-8,
+    step_eoss_clip_min: float = 1e-5,
+    step_eoss_clip_max: float = 1.0,
     step_l0: float = 1.0,
     step_l1: float = 0.0,
     step_fstar: float = 0.0,
@@ -563,6 +569,17 @@ def train_one_epoch(
         raise ValueError(f"unsupported step_rule: {step_rule}")
     if step_rule == "l0l1" and (step_l0 < 0.0 or step_l1 < 0.0):
         raise ValueError("step_l0 and step_l1 must be non-negative")
+    if step_rule == "eoss":
+        if not 0.0 <= step_eoss_ema < 1.0:
+            raise ValueError("step_eoss_ema must be in [0, 1) for eoss")
+        if step_eoss_interval <= 0:
+            raise ValueError("step_eoss_interval must be > 0 for eoss")
+        if step_eoss_eps <= 0.0:
+            raise ValueError("step_eoss_eps must be > 0 for eoss")
+        if step_eoss_clip_min <= 0.0 or step_eoss_clip_max <= 0.0:
+            raise ValueError("step_eoss_clip_min/max must be > 0 for eoss")
+        if step_eoss_clip_min > step_eoss_clip_max:
+            raise ValueError("step_eoss_clip_min must be <= step_eoss_clip_max for eoss")
     if step_rule == "sps-momentum" and not 0.0 <= step_sps_beta < 1.0:
         raise ValueError("step_sps_beta must be in [0, 1) for sps-momentum")
     if step_rule == "sps-momentum" and step_sps_c <= 0.0:
@@ -674,6 +691,11 @@ def train_one_epoch(
                 base_lr = group["lr"]
                 group["base_lr"] = base_lr
             base_lrs.append(base_lr)
+    if step_rule == "eoss" and step_eoss_beta is None:
+        if base_lrs:
+            step_eoss_beta = float(base_lrs[0])
+        elif optimizer.param_groups:
+            step_eoss_beta = float(optimizer.param_groups[0]["lr"])
     step_state: Dict[str, Any] = {}
     if optimizer.param_groups:
         step_state = optimizer.param_groups[0].setdefault("step_control_state", {})
@@ -748,9 +770,16 @@ def train_one_epoch(
         )
         needs_grad_norm_sq = step_rule in ("sps", "sps-momentum", "adaptive-backtracking") or needs_grad_norm
         use_sophia_hessian = direction == "sophia" and (global_step % sophia_hessian_every == 0)
+        use_eoss_hvp = step_rule == "eoss" and step_eoss_interval > 0 and (global_step % step_eoss_interval == 0)
+        eoss_curvature = None
         sophia_diag_estimates: dict[torch.Tensor, torch.Tensor] = {}
-        if use_sophia_hessian:
-            grads = torch.autograd.grad(loss, params, create_graph=True, allow_unused=True)
+        if use_sophia_hessian or step_rule == "eoss":
+            grads = torch.autograd.grad(
+                loss,
+                params,
+                create_graph=use_sophia_hessian or use_eoss_hvp,
+                allow_unused=True,
+            )
             grads_used = []
             params_used = []
             for param, grad in zip(params, grads):
@@ -759,10 +788,36 @@ def train_one_epoch(
                 grads_used.append(grad)
                 params_used.append(param)
 
-            if needs_grad_norm_sq:
+            if needs_grad_norm_sq or step_rule == "eoss":
                 grad_norm_sq = _sum_tensor_sq(grads_used)
                 grad_norm_sq_val = float(grad_norm_sq.item())
                 grad_norm = float(torch.sqrt(grad_norm_sq).item())
+
+            if use_eoss_hvp and grads_used:
+                hvp = torch.autograd.grad(
+                    grads_used,
+                    params_used,
+                    grad_outputs=grads_used,
+                    retain_graph=use_sophia_hessian,
+                    allow_unused=True,
+                )
+                g_norm_sq_val = float(grad_norm_sq_val or 0.0)
+                if g_norm_sq_val > 0.0 and math.isfinite(g_norm_sq_val):
+                    g_dot_h = 0.0
+                    for grad, hv in zip(grads_used, hvp):
+                        if hv is None:
+                            continue
+                        g_dot_h += float((grad.detach() * hv.detach()).sum().item())
+                    s_val = g_dot_h / (g_norm_sq_val + step_eoss_eps)
+                    if math.isfinite(s_val):
+                        s_hat = step_state.get("eoss_curvature_ema")
+                        if s_hat is None:
+                            s_hat = s_val
+                        else:
+                            s_hat = step_eoss_ema * float(s_hat) + (1.0 - step_eoss_ema) * s_val
+                        step_state["eoss_curvature_ema"] = s_hat
+                        step_state["eoss_last_curvature"] = s_val
+                        eoss_curvature = float(s_val)
 
             if use_sophia_hessian and grads_used:
                 diag_estimates: list[Optional[torch.Tensor]] = [None for _ in grads_used]
@@ -805,6 +860,9 @@ def train_one_epoch(
             current_grads = [
                 (param.grad.detach().clone() if param.grad is not None else None) for param in params
             ]
+
+        if eoss_curvature is not None:
+            curvature = eoss_curvature
 
         if grad_norm is not None:
             grad_norms.append(grad_norm)
@@ -1070,7 +1128,25 @@ def train_one_epoch(
         applied_update = False
         loss_value = float(loss.item())
         if step_rule != "none":
-            if step_rule == "l0l1":
+            if step_rule == "eoss":
+                s_hat = step_state.get("eoss_curvature_ema")
+                base_lr = step_state.get("eoss_base_lr")
+                if base_lr is None:
+                    if base_lrs:
+                        base_lr = float(base_lrs[0])
+                    else:
+                        base_lr = float(optimizer.param_groups[0]["lr"])
+                    step_state["eoss_base_lr"] = base_lr
+                step_size = float(base_lr)
+                if s_hat is not None and math.isfinite(float(s_hat)):
+                    denom = float(s_hat) + step_eoss_eps
+                    if denom <= step_eps:
+                        denom = step_eps
+                    step_size = float(step_eoss_beta) * 2.0 / denom
+                    step_size = min(max(step_size, step_eoss_clip_min), step_eoss_clip_max)
+                new_lrs = [step_size for _ in base_lrs] if base_lrs else [step_size]
+                step_state["eoss_last_step_size"] = step_size
+            elif step_rule == "l0l1":
                 # L0L1-GD update (arXiv:2409.14989 Algorithm 1).
                 _zero_sgd_momentum(optimizer)
                 grad_norm_val = grad_norm
