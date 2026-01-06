@@ -825,4 +825,4 @@ def update_detail(detail_run, selected_run, _version, legend_position):
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run(debug=True)
