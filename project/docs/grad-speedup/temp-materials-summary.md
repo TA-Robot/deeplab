@@ -68,6 +68,7 @@ Notation and cost decomposition
 2.3 SOAP
 - SOAP reinterprets Shampoo as running Adam in the Shampoo eigenbasis, reducing hyperparameters to preconditioning frequency.
 - Reported 40%+ fewer iterations and 35%+ wall-clock reduction vs AdamW in LLM pretraining; better than Shampoo.
+- Temp emphasis: SOAP’s key knob is preconditioning frequency (reduce frequency without breaking, unlike Shampoo).
 
 2.4 Muon (scalable)
 - Scalable Muon adds weight decay and parameter-wise scaling; reports ~2x compute efficiency vs AdamW and distributed implementation.

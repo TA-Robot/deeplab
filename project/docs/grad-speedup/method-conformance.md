@@ -16,7 +16,7 @@ Table
 | Direction / preconditioning | Dual NGD | arXiv:2505.21404 | audited | optional | Residual-space solve |
 | Direction / preconditioning | Shampoo | arXiv:1802.09568 | audited | optional | Kronecker preconditioning |
 | Direction / preconditioning | Distributed Shampoo | PMLR 139 (2021) | audited | optional | Distributed variant (AlgoPerf) |
-| Direction / preconditioning | SOAP | arXiv:2409.11321 | audited | optional | Algorithm 3 (SOAP) + Algorithm 4 (Eigenvectors), page 6 |
+| Direction / preconditioning | SOAP | arXiv:2409.11321 | audited | optional | Algorithm 3 (SOAP) + Algorithm 4 (Eigenvectors), page 6. Temp notes emphasize preconditioning frequency as the main tuning lever; SOAP should remain stable when frequency is reduced. |
 | Direction / preconditioning | K-FAC | arXiv:1503.05671 | audited | optional | Fisher block approx |
 | Direction / preconditioning | Sophia | arXiv:2305.14342 | audited | optional | Algorithm 3 + Eq. (6), pages 3 & 6 |
 | Direction / preconditioning | Muon (scalable) | arXiv:2502.16982 | audited | optional | Eq. (1)–(2) + scalable variants Eq. (3)–(7), pages 2–4 |
