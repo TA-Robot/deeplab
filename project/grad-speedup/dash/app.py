@@ -233,6 +233,11 @@ app.layout = html.Div(
                 ),
                 html.Label("Legend label max chars"),
                 dcc.Slider(id="legend-max-chars", min=4, max=48, step=1, value=20),
+                dcc.Checklist(
+                    id="show-legend-table",
+                    options=[{"label": "Show legend table (full labels)", "value": "on"}],
+                    value=["on"],
+                ),
             ],
         ),
         html.Div(
@@ -360,6 +365,7 @@ def build_overview_tab(
     legend_position: str,
     truncate: bool,
     max_len: int,
+    show_legend_table: bool,
 ) -> list:
     if runs_df.empty:
         return [html.Div("No runs available for the current filters.")]
@@ -422,7 +428,7 @@ def build_overview_tab(
         style_table={"overflowX": "auto"},
     )
 
-    return [
+    content = [
         html.Div(
             className="grid-2",
             children=[
@@ -430,9 +436,36 @@ def build_overview_tab(
                 dcc.Graph(id="speed-bar", figure=bar_fig),
             ],
         ),
-        html.H3("Run Table"),
-        table,
     ]
+    if show_legend_table and color_by and color_col:
+        legend_cols = [color_col]
+        if color_col != color_by:
+            legend_cols.append(color_by)
+        legend_df = plot_df[legend_cols].dropna().drop_duplicates()
+        legend_df = legend_df.rename(columns={color_col: "label", color_by: "full"})
+        legend_columns = [{"name": "label", "id": "label"}]
+        if "full" in legend_df.columns:
+            legend_columns.append({"name": "full", "id": "full"})
+        content.extend(
+            [
+                html.H3("Legend (full labels)"),
+                dash_table.DataTable(
+                    data=legend_df.to_dict("records"),
+                    columns=legend_columns,
+                    page_size=12,
+                    sort_action="native",
+                    style_table={"overflowX": "auto"},
+                ),
+            ]
+        )
+
+    content.extend(
+        [
+            html.H3("Run Table"),
+            table,
+        ]
+    )
+    return content
 
 
 def build_compare_tab(
@@ -445,6 +478,7 @@ def build_compare_tab(
     truncate: bool,
     max_len: int,
     axis_mode: str,
+    show_legend_table: bool,
 ) -> list:
     if not selected_runs:
         return [html.Div("Select runs to compare.")]
@@ -499,7 +533,29 @@ def build_compare_tab(
         apply_legend(loss_fig, legend_position)
         loss_graph = dcc.Graph(figure=loss_fig)
 
-    return [html.Div(className="grid-2", children=[dcc.Graph(figure=acc_fig), loss_graph])]
+    content = [html.Div(className="grid-2", children=[dcc.Graph(figure=acc_fig), loss_graph])]
+    if show_legend_table and color_by and color_col:
+        legend_cols = [color_col]
+        if color_col != color_by:
+            legend_cols.append(color_by)
+        legend_df = plot_epochs[legend_cols].dropna().drop_duplicates()
+        legend_df = legend_df.rename(columns={color_col: "label", color_by: "full"})
+        legend_columns = [{"name": "label", "id": "label"}]
+        if "full" in legend_df.columns:
+            legend_columns.append({"name": "full", "id": "full"})
+        content.extend(
+            [
+                html.H3("Legend (full labels)"),
+                dash_table.DataTable(
+                    data=legend_df.to_dict("records"),
+                    columns=legend_columns,
+                    page_size=12,
+                    sort_action="native",
+                    style_table={"overflowX": "auto"},
+                ),
+            ]
+        )
+    return content
 
 
 def build_detail_tab(
@@ -675,6 +731,7 @@ def build_diagnostics_tab(
     Input("legend-position", "value"),
     Input("truncate-legend", "value"),
     Input("legend-max-chars", "value"),
+    Input("show-legend-table", "value"),
 )
 def render_tab(
     tab,
@@ -688,6 +745,7 @@ def render_tab(
     legend_position,
     truncate_vals,
     max_len,
+    legend_table_vals,
 ):
     runs_df, epochs_df, steps_df = get_data()
     filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
@@ -701,6 +759,7 @@ def render_tab(
     filtered_steps = filter_by_run_ids(steps_df, run_ids)
 
     truncate = "on" in (truncate_vals or [])
+    show_legend_table = "on" in (legend_table_vals or [])
     legend_position = legend_position or "bottom"
 
     if tab == "overview":
@@ -712,6 +771,7 @@ def render_tab(
             legend_position,
             truncate,
             max_len,
+            show_legend_table,
         )
     elif tab == "compare":
         default_runs = run_ids[:3] if len(run_ids) > 3 else run_ids
@@ -756,6 +816,7 @@ def render_tab(
     Input("legend-position", "value"),
     Input("truncate-legend", "value"),
     Input("legend-max-chars", "value"),
+    Input("show-legend-table", "value"),
 )
 def update_compare(
     selected_runs,
@@ -770,6 +831,7 @@ def update_compare(
     legend_position,
     truncate_vals,
     max_len,
+    legend_table_vals,
 ):
     runs_df, epochs_df, steps_df = get_data()
     filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
@@ -781,8 +843,20 @@ def update_compare(
     )
     selected = [rid for rid in (selected_runs or []) if rid in filtered_ids]
     truncate = "on" in (truncate_vals or [])
+    show_legend_table = "on" in (legend_table_vals or [])
     axis_mode = axis_mode or "epoch"
-    return build_compare_tab(filtered_runs, epochs_df, steps_df, selected, color_by, legend_position or "bottom", truncate, max_len, axis_mode)
+    return build_compare_tab(
+        filtered_runs,
+        epochs_df,
+        steps_df,
+        selected,
+        color_by,
+        legend_position or "bottom",
+        truncate,
+        max_len,
+        axis_mode,
+        show_legend_table,
+    )
 
 
 @callback(
