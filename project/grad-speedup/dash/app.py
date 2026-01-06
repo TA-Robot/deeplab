@@ -7,7 +7,7 @@ from typing import Iterable, Optional, Sequence
 
 import pandas as pd
 import plotly.express as px
-from dash import Dash, Input, Output, State, callback, dcc, html, dash_table, ctx
+from dash import Dash, Input, Output, State, callback, dcc, html, dash_table
 
 DASH_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = DASH_DIR.parent
@@ -251,7 +251,6 @@ app.layout = html.Div(
                     ],
                 ),
                 html.Div(id="tab-content"),
-                dcc.Store(id="selected-run"),
             ],
         ),
     ],
@@ -676,7 +675,6 @@ def build_diagnostics_tab(
     Input("legend-position", "value"),
     Input("truncate-legend", "value"),
     Input("legend-max-chars", "value"),
-    State("selected-run", "data"),
 )
 def render_tab(
     tab,
@@ -690,7 +688,6 @@ def render_tab(
     legend_position,
     truncate_vals,
     max_len,
-    selected_run,
 ):
     runs_df, epochs_df, steps_df = get_data()
     filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
@@ -728,7 +725,7 @@ def render_tab(
     elif tab == "detail":
         content = [
             html.Label("Run"),
-            dcc.Dropdown(id="detail-run", options=[{"label": rid, "value": rid} for rid in run_ids], value=selected_run or (run_ids[0] if run_ids else None)),
+            dcc.Dropdown(id="detail-run", options=[{"label": rid, "value": rid} for rid in run_ids], value=(run_ids[0] if run_ids else None)),
             html.Div(id="detail-content"),
         ]
     else:
@@ -789,39 +786,14 @@ def update_compare(
 
 
 @callback(
-    Output("selected-run", "data"),
-    Input("speed-scatter", "clickData"),
-    Input("detail-run", "value"),
-    State("selected-run", "data"),
-)
-def sync_selected_run(click_data, detail_run, current):
-    triggered = ctx.triggered_id
-    if triggered == "detail-run" and detail_run:
-        return detail_run
-    if triggered == "speed-scatter" and click_data and "points" in click_data:
-        point = click_data["points"][0]
-        custom = point.get("customdata") if isinstance(point, dict) else None
-        if custom:
-            if isinstance(custom, (list, tuple)):
-                return str(custom[0])
-            return str(custom)
-        hovertext = point.get("hovertext") if isinstance(point, dict) else None
-        if hovertext:
-            return str(hovertext)
-    return current
-
-
-@callback(
     Output("detail-content", "children"),
     Input("detail-run", "value"),
-    Input("selected-run", "data"),
     Input("data-version", "data"),
     State("legend-position", "value"),
 )
-def update_detail(detail_run, selected_run, _version, legend_position):
+def update_detail(detail_run, _version, legend_position):
     runs_df, epochs_df, steps_df = get_data()
-    run_id = detail_run or selected_run
-    return build_detail_tab(runs_df, epochs_df, steps_df, run_id, legend_position or "bottom")
+    return build_detail_tab(runs_df, epochs_df, steps_df, detail_run, legend_position or "bottom")
 
 
 if __name__ == "__main__":
