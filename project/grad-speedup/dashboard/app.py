@@ -260,12 +260,24 @@ def extract_selected_run_id(selection_event: Optional[object]) -> Optional[str]:
 
 
 def apply_plot_theme(fig: go.Figure) -> go.Figure:
+    legend_position = st.session_state.get("legend_position", "right")
+    legend_cfg: dict[str, object] = {}
+    margins = dict(l=40, r=20, t=50, b=35)
+    if legend_position == "bottom":
+        legend_cfg = dict(orientation="h", yanchor="top", y=-0.25, xanchor="left", x=0)
+        margins["b"] = 70
+    elif legend_position == "hide":
+        legend_cfg = dict()
+        fig.update_layout(showlegend=False)
+    else:
+        legend_cfg = dict(orientation="v", yanchor="top", y=1.0, xanchor="left", x=1.02)
     fig.update_layout(
         font_family="Space Grotesk, sans-serif",
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         legend_title_text="",
-        margin=dict(l=40, r=20, t=50, b=35),
+        legend=legend_cfg,
+        margin=margins,
     )
     return fig
 
@@ -356,6 +368,9 @@ def plot_line(
     y_col: Optional[str],
     title: str,
     color: Optional[str] = None,
+    hover_data: Optional[Sequence[str]] = None,
+    hover_name: Optional[str] = None,
+    line_group: Optional[str] = None,
 ) -> None:
     if df.empty or x_col is None or y_col is None:
         show_empty(title)
@@ -365,7 +380,27 @@ def plot_line(
         return
     if color and color not in df.columns:
         color = None
-    fig = px.line(df, x=x_col, y=y_col, color=color, title=title)
+    if hover_name and hover_name not in df.columns:
+        hover_name = None
+    if hover_data:
+        hover_data = [col for col in hover_data if col in df.columns]
+        if not hover_data:
+            hover_data = None
+    if line_group and line_group not in df.columns:
+        line_group = None
+    plot_df = df
+    if line_group and x_col in df.columns:
+        plot_df = df.sort_values(by=[line_group, x_col], na_position="last")
+    fig = px.line(
+        plot_df,
+        x=x_col,
+        y=y_col,
+        color=color,
+        title=title,
+        hover_data=hover_data,
+        hover_name=hover_name,
+        line_group=line_group,
+    )
     st.plotly_chart(apply_plot_theme(fig), use_container_width=True)
 
 
@@ -562,6 +597,9 @@ def main() -> None:
             label_max_chars = st.slider("Label max chars", 4, 40, 16)
         else:
             label_max_chars = None
+        truncate_legend = st.toggle("Truncate legend labels", value=True)
+        legend_position = st.selectbox("Legend position", ["Right", "Bottom", "Hide"], index=1)
+        st.session_state["legend_position"] = legend_position.lower()
         aggregate_overview = st.toggle("Aggregate seeds by run_id", value=False)
         sort_bars = st.toggle("Sort bar charts by metric", value=True)
         sort_order = st.radio("Bar order", ["Descending", "Ascending"], horizontal=True)
@@ -569,13 +607,17 @@ def main() -> None:
         max_k = max(1, min(50, len(filters_df)))
         top_k = st.slider("Top-K bars (0=all)", 0, max_k, value=0)
 
-    bar_color = color_by if color_by and color_by != run_id_col else None
     overview_plot_df = (
         aggregate_by_run_id(filters_df, run_id_col, label_cols) if aggregate_overview else filters_df
     )
     baseline_source_df = (
         aggregate_by_run_id(runs_df, run_id_col, label_cols) if aggregate_overview else runs_df
     )
+    color_plot_df = overview_plot_df
+    color_by_col = color_by
+    if truncate_legend and color_by:
+        color_plot_df, color_by_col = add_label_column(color_plot_df, color_by, label_max_chars)
+    bar_color = color_by_col if color_by_col and color_by_col != run_id_col else None
 
     col_a, col_b, col_c = st.columns(3)
     col_a.metric("Runs", len(filters_df))
@@ -640,13 +682,13 @@ def main() -> None:
 
         st.subheader("Speed vs Quality")
         speed_metric = pick_metric(
-            overview_plot_df,
+            color_plot_df,
             ["cost_to_target", "time_to_target", "mean_step_time_ms", "mean_step_time_sec", "step_time_ms_mean"],
         )
         quality_metric = pick_metric(
-            overview_plot_df, ["final_test_acc", "best_test_acc", "test_acc", "val_acc", "accuracy"]
+            color_plot_df, ["final_test_acc", "best_test_acc", "test_acc", "val_acc", "accuracy"]
         )
-        scatter_df = overview_plot_df
+        scatter_df = color_plot_df
         scatter_label_col = None
         if show_labels and label_by:
             scatter_df, scatter_label_col = add_label_column(scatter_df, label_by, label_max_chars)
@@ -660,7 +702,7 @@ def main() -> None:
             speed_metric,
             quality_metric,
             "Speed vs quality",
-            color=color_by,
+            color=color_by_col,
             hover_data=hover_cols,
             hover_name=run_id_col,
             text=scatter_label_col if show_labels else None,
@@ -671,11 +713,11 @@ def main() -> None:
 
         st.subheader("Speed Summary")
         speed_bar_metric = pick_metric(
-            overview_plot_df,
+            color_plot_df,
             ["mean_step_time_ms", "mean_step_time_sec", "step_time_ms_mean", "time_to_target", "cost_to_target"],
         )
         bar_selection = plot_bar(
-            overview_plot_df,
+            color_plot_df,
             run_id_col,
             speed_bar_metric,
             "Speed metric by run",
@@ -709,7 +751,7 @@ def main() -> None:
                 show_empty("baseline speed metric")
             else:
                 base = baseline_value.mean()
-                speedup_df = overview_plot_df.copy()
+                speedup_df = color_plot_df.copy()
                 speedup_df["speedup"] = base / coerce_numeric(speedup_df[speed_bar_metric])
                 plot_bar(
                     speedup_df,
@@ -822,6 +864,11 @@ def main() -> None:
         compare_steps = filter_by_run_ids(steps_df, compare_runs) if steps_df is not None else pd.DataFrame()
         compare_epochs = filter_by_run_ids(epochs_df, compare_runs) if epochs_df is not None else pd.DataFrame()
 
+        compare_color_col = run_id_col
+        if truncate_legend and run_id_col:
+            compare_epochs, compare_color_col = add_label_column(compare_epochs, run_id_col, label_max_chars)
+            compare_steps, _ = add_label_column(compare_steps, run_id_col, label_max_chars)
+
         step_x = resolve_col(compare_steps, ["step", "global_step", "step_idx", "iteration"])
         epoch_x = resolve_col(compare_epochs, ["epoch", "epoch_idx"])
         time_x = resolve_col(compare_epochs, TIME_COL_CANDIDATES)
@@ -832,16 +879,34 @@ def main() -> None:
         col1, col2 = st.columns(2)
         with col1:
             if curve_axis == "time":
-                plot_line(compare_epochs, time_x, accuracy_metric, "Accuracy vs time", color=run_id_col)
+                plot_line(
+                    compare_epochs,
+                    time_x,
+                    accuracy_metric,
+                    "Accuracy vs time",
+                    color=compare_color_col,
+                    hover_name=run_id_col,
+                    line_group=run_id_col,
+                )
             else:
-                plot_line(compare_epochs, epoch_x, accuracy_metric, "Accuracy vs epoch", color=run_id_col)
+                plot_line(
+                    compare_epochs,
+                    epoch_x,
+                    accuracy_metric,
+                    "Accuracy vs epoch",
+                    color=compare_color_col,
+                    hover_name=run_id_col,
+                    line_group=run_id_col,
+                )
         with col2:
             plot_line(
                 compare_steps,
                 step_x,
                 pick_metric(compare_steps, ["train_loss", "loss"]),
                 "Train loss overlay",
-                color=run_id_col,
+                color=compare_color_col,
+                hover_name=run_id_col,
+                line_group=run_id_col,
             )
 
         st.subheader("Speed and Quality Summary")
@@ -896,6 +961,7 @@ def main() -> None:
                 pick_metric(diag_epochs, ["sparsity_fraction", "sparsity"]),
                 "Sparsity over epochs",
                 color=run_id_col,
+                line_group=run_id_col,
             )
         with col4:
             plot_line(
@@ -904,6 +970,7 @@ def main() -> None:
                 pick_metric(diag_epochs, ["effective_flops_ratio", "effective_flops"]),
                 "Effective FLOPs ratio",
                 color=run_id_col,
+                line_group=run_id_col,
             )
 
         st.subheader("Stability Signals")
@@ -915,6 +982,7 @@ def main() -> None:
                 pick_metric(diag_steps, ["grad_norm", "grad_norm_clip"]),
                 "Grad norm",
                 color=run_id_col,
+                line_group=run_id_col,
             )
         with st_cols[1]:
             plot_line(
@@ -923,6 +991,7 @@ def main() -> None:
                 pick_metric(diag_steps, ["curvature", "hessian_trace"]),
                 "Curvature",
                 color=run_id_col,
+                line_group=run_id_col,
             )
         with st_cols[2]:
             plot_line(
@@ -931,6 +1000,7 @@ def main() -> None:
                 pick_metric(diag_steps, ["lr", "step_size"]),
                 "Learning rate",
                 color=run_id_col,
+                line_group=run_id_col,
             )
 
     with tabs[4]:

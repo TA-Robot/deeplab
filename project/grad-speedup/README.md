@@ -56,6 +56,13 @@ python scripts/build_grad_speedup_report.py --runs-dir ../runs/grad-speedup --ou
 Dashboard
 ```
 cd project/grad-speedup
+pip install -r dash/requirements.txt
+python dash/app.py
+```
+
+Legacy Streamlit dashboard
+```
+cd project/grad-speedup
 pip install -r dashboard/requirements.txt
 streamlit run dashboard/app.py
 ```

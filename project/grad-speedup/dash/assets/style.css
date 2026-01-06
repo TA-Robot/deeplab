@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+body {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  background: radial-gradient(circle at 20% 20%, #f7f1e3, #e7eef2 55%, #f5f8f6 100%);
+  color: #1f2a2e;
+}
+
+.app-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 320px;
+  padding: 18px 16px;
+  background: linear-gradient(180deg, #f7f1e3 0%, #eef4f7 100%);
+  border-right: 1px solid #e0d4c5;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.sidebar h2 {
+  margin-top: 0;
+}
+
+.sidebar label {
+  display: block;
+  margin-top: 12px;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.sidebar input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid #d5c9b8;
+  border-radius: 6px;
+  background: #fffaf1;
+  box-sizing: border-box;
+}
+
+.sidebar button {
+  margin-top: 10px;
+  padding: 8px 10px;
+  width: 100%;
+  background: #1f6f8b;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.status-text {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: #4a5a60;
+}
+
+.content {
+  flex: 1;
+  padding: 18px 24px;
+  box-sizing: border-box;
+}
+
+.summary-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metric {
+  background: #fef9f0;
+  border: 1px solid #e7d9c5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 120px;
+}
+
+.metric-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b5b4b;
+}
+
+.metric-value {
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1100px) {
+  .app-container {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e0d4c5;
+  }
+  .grid-2,
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
