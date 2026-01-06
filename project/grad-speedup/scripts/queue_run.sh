@@ -72,9 +72,9 @@ dequeue_job() {
 extract_run_id() {
   local cmd="$1"
   local run_id
-  run_id=$(python - <<'PY'
+  run_id=$(python - "$cmd" <<'PY'
 import shlex, sys
-cmd = sys.argv[1]
+cmd = sys.argv[1] if len(sys.argv) > 1 else ""
 try:
     parts = shlex.split(cmd)
 except ValueError:
@@ -87,7 +87,7 @@ for i, token in enumerate(parts):
         break
 print(run_id)
 PY
-"$cmd")
+)
   echo "$run_id"
 }
 
