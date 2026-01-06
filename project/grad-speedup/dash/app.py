@@ -249,13 +249,34 @@ app.layout = html.Div(
                     id="tabs",
                     value="overview",
                     children=[
-                        dcc.Tab(label="Overview", value="overview"),
-                        dcc.Tab(label="Compare", value="compare"),
-                        dcc.Tab(label="Run Detail", value="detail"),
-                        dcc.Tab(label="Diagnostics", value="diagnostics"),
+                        dcc.Tab(label="Overview", value="overview", children=[html.Div(id="overview-content")]),
+                        dcc.Tab(
+                            label="Compare",
+                            value="compare",
+                            children=[
+                                html.Label("Runs"),
+                                dcc.Dropdown(id="compare-runs", multi=True),
+                                html.Label("Learning curve x-axis"),
+                                dcc.RadioItems(
+                                    id="compare-axis",
+                                    options=[{"label": "Epoch", "value": "epoch"}, {"label": "Time", "value": "time"}],
+                                    value="epoch",
+                                ),
+                                html.Div(id="compare-content"),
+                            ],
+                        ),
+                        dcc.Tab(
+                            label="Run Detail",
+                            value="detail",
+                            children=[
+                                html.Label("Run"),
+                                dcc.Dropdown(id="detail-run"),
+                                html.Div(id="detail-content"),
+                            ],
+                        ),
+                        dcc.Tab(label="Diagnostics", value="diagnostics", children=[html.Div(id="diagnostics-content")]),
                     ],
                 ),
-                html.Div(id="tab-content"),
             ],
         ),
     ],
@@ -719,8 +740,34 @@ def build_diagnostics_tab(
 
 
 @callback(
-    Output("tab-content", "children"),
-    Input("tabs", "value"),
+    Output("compare-runs", "options"),
+    Output("compare-runs", "value"),
+    Output("detail-run", "options"),
+    Output("detail-run", "value"),
+    Input("data-version", "data"),
+    Input("filter-model", "value"),
+    Input("filter-optimizer", "value"),
+    Input("filter-step-rule", "value"),
+    Input("filter-direction", "value"),
+    Input("filter-seed", "value"),
+)
+def update_run_dropdowns(_version, models, optimizers, step_rules, directions, seeds):
+    runs_df, _, _ = get_data()
+    filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
+    run_id_col = resolve_col(filtered_runs, RUN_ID_CANDIDATES)
+    run_ids = (
+        filtered_runs[run_id_col].astype(str).unique().tolist()
+        if run_id_col and not filtered_runs.empty
+        else []
+    )
+    options = [{"label": rid, "value": rid} for rid in run_ids]
+    default_compare = run_ids[:3] if len(run_ids) > 3 else run_ids
+    default_detail = run_ids[0] if run_ids else None
+    return options, default_compare, options, default_detail
+
+
+@callback(
+    Output("overview-content", "children"),
     Input("data-version", "data"),
     Input("filter-model", "value"),
     Input("filter-optimizer", "value"),
@@ -733,8 +780,7 @@ def build_diagnostics_tab(
     Input("legend-max-chars", "value"),
     Input("show-legend-table", "value"),
 )
-def render_tab(
-    tab,
+def update_overview(
     _version,
     models,
     optimizers,
@@ -757,49 +803,67 @@ def render_tab(
     )
     filtered_epochs = filter_by_run_ids(epochs_df, run_ids)
     filtered_steps = filter_by_run_ids(steps_df, run_ids)
-
     truncate = "on" in (truncate_vals or [])
     show_legend_table = "on" in (legend_table_vals or [])
     legend_position = legend_position or "bottom"
+    return build_overview_tab(
+        filtered_runs,
+        filtered_epochs,
+        filtered_steps,
+        color_by,
+        legend_position,
+        truncate,
+        max_len,
+        show_legend_table,
+    )
 
-    if tab == "overview":
-        content = build_overview_tab(
-            filtered_runs,
-            filtered_epochs,
-            filtered_steps,
-            color_by,
-            legend_position,
-            truncate,
-            max_len,
-            show_legend_table,
-        )
-    elif tab == "compare":
-        default_runs = run_ids[:3] if len(run_ids) > 3 else run_ids
-        content = [
-            html.Label("Runs"),
-            dcc.Dropdown(id="compare-runs", options=[{"label": rid, "value": rid} for rid in run_ids], value=default_runs, multi=True),
-            html.Label("Learning curve x-axis"),
-            dcc.RadioItems(id="compare-axis", options=[{"label": "Epoch", "value": "epoch"}, {"label": "Time", "value": "time"}], value="epoch"),
-            html.Div(id="compare-content"),
-        ]
-    elif tab == "detail":
-        content = [
-            html.Label("Run"),
-            dcc.Dropdown(id="detail-run", options=[{"label": rid, "value": rid} for rid in run_ids], value=(run_ids[0] if run_ids else None)),
-            html.Div(id="detail-content"),
-        ]
-    else:
-        content = build_diagnostics_tab(
-            filtered_runs,
-            filtered_epochs,
-            filtered_steps,
-            color_by,
-            legend_position,
-            truncate,
-            max_len,
-        )
 
-    return content
+@callback(
+    Output("diagnostics-content", "children"),
+    Input("data-version", "data"),
+    Input("filter-model", "value"),
+    Input("filter-optimizer", "value"),
+    Input("filter-step-rule", "value"),
+    Input("filter-direction", "value"),
+    Input("filter-seed", "value"),
+    Input("color-by", "value"),
+    Input("legend-position", "value"),
+    Input("truncate-legend", "value"),
+    Input("legend-max-chars", "value"),
+)
+def update_diagnostics(
+    _version,
+    models,
+    optimizers,
+    step_rules,
+    directions,
+    seeds,
+    color_by,
+    legend_position,
+    truncate_vals,
+    max_len,
+):
+    runs_df, epochs_df, steps_df = get_data()
+    filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
+    run_id_col = resolve_col(filtered_runs, RUN_ID_CANDIDATES)
+    run_ids = (
+        filtered_runs[run_id_col].astype(str).unique().tolist()
+        if run_id_col and not filtered_runs.empty
+        else []
+    )
+    filtered_epochs = filter_by_run_ids(epochs_df, run_ids)
+    filtered_steps = filter_by_run_ids(steps_df, run_ids)
+    truncate = "on" in (truncate_vals or [])
+    legend_position = legend_position or "bottom"
+    return build_diagnostics_tab(
+        filtered_runs,
+        filtered_epochs,
+        filtered_steps,
+        color_by,
+        legend_position,
+        truncate,
+        max_len,
+    )
 
 
 @callback(
