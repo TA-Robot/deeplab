@@ -5,9 +5,13 @@ WAIT_RUN="project/runs/grad-speedup/20260106-grad-speedup-step-l0l1-soap-resnet1
 LOG_DIR="project/runs/grad-speedup/_logs"
 mkdir -p "${LOG_DIR}"
 
-while [ ! -f "${WAIT_RUN}" ]; do
-  sleep 120
-done
+if [ -f "${WAIT_RUN}" ]; then
+  while [ ! -f "${WAIT_RUN}" ]; do
+    sleep 120
+  done
+else
+  echo "WAIT_RUN not found; proceeding without wait: ${WAIT_RUN}" >> "${LOG_DIR}/20260106-grad-speedup-soap-fast-chain.log"
+fi
 
 python -u project/grad-speedup/scripts/run_cifar10.py \
   --run-id 20260106-grad-speedup-baseline-short-resnet18-maxsteps2000-seed0 \
