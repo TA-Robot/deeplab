@@ -5,7 +5,7 @@ relying on mainstream implementation tricks (mixed precision, FlashAttention,
 or generic step-count tuning). The focus is CIFAR-10 experiments that compare
 single modules and module combinations with a shared baseline.
 
-Primary docs:
+Primary docs
 - CIFAR-10 implementation spec: project/docs/grad-speedup/cifar10-implementation-spec.md
 - Experiment brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
 - Temp materials record: project/docs/grad-speedup/temp-materials-summary.md
@@ -21,20 +21,20 @@ Primary docs:
 - Dashboard spec: project/docs/grad-speedup/dashboard-spec.md
 - Dashboard implementation: project/grad-speedup/dashboard/README.md
 
-Scope notes:
-- We compare time-to-target / steps-to-target / cost-to-target, not just final accuracy.
-- We keep data, model, and training budgets fixed; only algorithmic modules change.
-- Default control uses step-based budgets (max_steps=14,000) with eval_interval_steps=1000.
+Scope notes
+- Primary metrics are time-to-target / steps-to-target / cost-to-target.
+- Base grid is a 72-condition sweep (SGD/AdamW × step-control × clip × anderson × sparsity).
+- Direction/preconditioning methods (SOAP/GN/etc) are tracked separately.
 
 Isolation
 - Grad-speedup code and scripts live under project/grad-speedup/ only.
 - Do not import or modify project/src or run_mnist_experiment.py for this track.
-- Tickets and PM artifacts for this track stay under project/docs/grad-speedup/.
+- Artifacts and logs are written under project/runs/grad-speedup/.
 
-Module families (from research materials):
-- Module A: compute reduction (e.g., structured sparsity or linearized-Bregman style updates).
-- Module B: update direction (e.g., curvature-aware preconditioning).
-- Module C: step-size control (e.g., stability- or curvature-aware step rules).
-- Module D: external acceleration (e.g., Anderson / nonlinear acceleration).
-
-Artifacts and logs for this track should be written under project/runs/grad-speedup/.
+Module families
+- Base optimizer: SGD+Momentum or AdamW.
+- Step control: None, EoSS, Adaptive Backtracking (Silver optional).
+- Geometry/clip: GGNC (global or layerwise).
+- Outer accel: Anderson.
+- Sparsity: LinBreg.
+- Direction/preconditioning (SOAP/GN) is a separate track.

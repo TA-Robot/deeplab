@@ -28,20 +28,20 @@ Table
 | Direction / preconditioning | LARS | arXiv:1708.03888 | audited | optional | Large-batch scaling |
 | Direction / preconditioning | LAMB | arXiv:1904.00962 | audited | optional | Layerwise adaptive scaling |
 | Direction / preconditioning | CLEAN (Nystrom) | OpenReview ICLR 2026 (wNh0sE9QWD) | audited | optional | Two-sided preconditioning |
-| Step control | EoSS (Edge of Stochastic Stability) | arXiv:2412.20553 | audited | core | Stability measurement only (no optimizer step rule) |
-| Step control | L0L1-GD | arXiv:2409.14989; arXiv:2410.10800 | implemented | core | Algorithm 1 ((L0,L1)-GD), page 7 |
-| Step control | SPS (Polyak step size) | arXiv:2409.14989; arXiv:2406.04142 | implemented | core | Algorithm 2 (GD-PS), page 9 |
-| Step control | SPS + Momentum | arXiv:2406.04142 | implemented | core | SPS + heavy-ball momentum |
+| Step control | EoSS (Edge of Stochastic Stability) | arXiv:2412.20553 | audited | core | Step-control rule via curvature estimate (HVP + EMA) |
+| Step control | L0L1-GD | arXiv:2409.14989; arXiv:2410.10800 | implemented | optional | Legacy step rule (not in base grid) |
+| Step control | SPS (Polyak step size) | arXiv:2409.14989; arXiv:2406.04142 | implemented | optional | Legacy step rule (not in base grid) |
+| Step control | SPS + Momentum | arXiv:2406.04142 | implemented | optional | Legacy step rule (not in base grid) |
 | Step control | Adaptive Backtracking | arXiv:2408.13150 | implemented | core | Armijo violation (4a) + adaptive factor (4b), page 3 |
-| Step control | Silver step sizes | arXiv:2309.16530; PMLR 247 (2024) | implemented | core | Step-size schedule uses v(t)=max{v:t>=F_v} and eta_t = eta*(1+rho^{v(t)-1}) |
-| Step control | Stochastic Adaptive GD Without Descent | arXiv:2509.14969 | implemented | core | Variant III adaptive step size with extra gradient eval |
+| Step control | Silver step sizes | arXiv:2309.16530; PMLR 247 (2024) | implemented | optional | Legacy step rule (not in base grid) |
+| Step control | Stochastic Adaptive GD Without Descent | arXiv:2509.14969 | implemented | optional | Legacy step rule (not in base grid) |
 | Step control | Armijo line search | TBD | pending | optional | Non-uniform smoothness |
 | Stability / geometry | GGNC | arXiv:2506.01913 | audited | core | Eq. (GGNC) + Algorithm 1, pages 3–4 |
 | Outer acceleration | Anderson acceleration | arXiv:1809.02341 | audited | core | Fixed-point extrapolation |
 | Outer acceleration | Scieur subspace method | PMLR 238 (2024) | audited | optional | Low-dim curvature via differences |
 | Outer acceleration | Block Broyden | arXiv:2306.13542 | audited | optional | Multi-secant updates |
 | Outer acceleration | SR1 / regularized cubic | arXiv:2405.16452 | audited | optional | Curvature with negative directions |
-| Sparsity / compute | Linearized Bregman | arXiv:1405.2380; arXiv:1905.09449 | audited | optional | Dynamic sparsity operator |
+| Sparsity / compute | Linearized Bregman | arXiv:1405.2380; arXiv:1905.09449 | audited | core | Dynamic sparsity operator |
 | Sparsity / compute | Multilevel mirror descent | TBD | pending | optional | Alternating sparsity phases |
 | Prox / Bregman | SPPM | arXiv:2502.03401 | audited | optional | Stochastic proximal point |
 | Prox / Bregman | MSBPG | JMLR 2025 (24-0859) | audited | optional | Nonconvex Bregman prox |
@@ -73,7 +73,10 @@ Core method specs (paper-accurate; implemented in grad-speedup)
 EoSS (Edge of Stochastic Stability) (arXiv:2412.20553)
 - Definition 3 (Eq. 3), page 10:
   - Batch Sharpness(θ) := E_{B∼P_b}[∇L_B(θ)^T H(L_B) ∇L_B(θ) / ||∇L_B(θ)||^2].
-- Usage: diagnostic only (no optimizer update rule). Estimate via HVP along mini-batch gradient.
+- Step-control usage (spec-aligned):
+  - Estimate directional curvature s_t ≈ g_t^T H_t g_t / ||g_t||^2 using HVP every K steps.
+  - Maintain EMA: s_hat_t = α s_hat_{t−1} + (1−α) s_t.
+  - Step size rule: η_t = β * 2 / (s_hat_t + ε), with clipping to [η_min, η_max].
 
 (L0, L1)-smoothness / (L0,L1)-GD (arXiv:2409.14989; arXiv:2410.10800)
 - Algorithm 1 ((L0,L1)-GD), page 7 (arXiv:2409.14989):
@@ -152,7 +155,7 @@ Silver step sizes (PMLR 247, 2024)
 
 Implementation note (current repo state)
 - Step-control implementations in `project/grad-speedup/src/train.py` follow the equations above for L0L1-GD, SPS (Polyak step size without extra η), SPS+Momentum (MomSPS_max), ABLS, Silver, and SAGD.
-- EoSS remains diagnostic only (no optimizer update rule).
+- EoSS is used as a step-control rule in the base grid (curvature estimate + EMA + clipping).
 - SGD momentum is zeroed for GD-based step rules (l0l1, sps, silver, adaptive-backtracking, sagd); sps-momentum uses its own beta.
 - For paper-accurate step-control runs, keep direction/clip/sparsity disabled; code enforces direction='none' for adaptive-backtracking, sps-momentum, sagd, and sparsity='none' for adaptive-backtracking/sagd.
 

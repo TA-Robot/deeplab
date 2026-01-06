@@ -1,70 +1,86 @@
-# CIFAR-10 Implementation Spec (Grad-Speedup Track)
+# CIFAR-10 Implementation Spec (Grad-Speedup Track, Spec-Aligned)
 
 Goal
-- Implement and compare algorithmic speedups for gradient methods as modular components.
-- Evaluate single modules and combinations on CIFAR-10 using shared baselines.
-- Focus on time-to-target / steps-to-target / cost-to-target rather than best final accuracy.
+- Implement algorithmic speedups for gradient methods as composable modules.
+- Evaluate single modules and their combinations on CIFAR-10 under fixed conditions.
+- Primary focus is time-to-target / steps-to-target / cost-to-target (not just final accuracy).
 
 Cost model
 - Total cost C = T * c
-  - T: steps-to-target (optimizer steps to reach a target accuracy)
-  - c: average cost per step (wall time or FLOPs proxy)
+  - T: steps-to-target (optimizer steps to reach target accuracy)
+  - c: mean cost per step (wall time proxy)
 
 Primary metrics (must report)
 - Steps-to-target: T(A*) for A* in {0.85, 0.90, 0.92, 0.94}
 - Time-to-target: W(A*) (wall time to reach A*)
 - Cost-to-target: C(A*) = T(A*) * mean step time
-- Train/val curves: loss, accuracy, step time, throughput
+- Learning curves: train loss/acc, test acc vs step/epoch/time
 
 Secondary metrics (recommended)
+- Mean step time (warmup excluded) + P50/P90 if available
 - Peak GPU memory
 - Gradient norm stats (mean, p50, p90)
-- Optional curvature proxy if used (e.g., directional curvature from HVP)
+- Optional curvature proxy (if using EoSS)
 
 Fixed conditions
 - Precision: FP32 only (no mixed precision)
-- Data augmentation (train only): RandomCrop(32, padding=4), RandomHorizontalFlip(p=0.5)
+- Augmentation (train only): RandomCrop(32, padding=4), RandomHorizontalFlip(p=0.5)
 - Normalize: CIFAR-10 mean/std
-- Determinism: fixed seeds; record determinism flag and library versions
-- Budget: max epochs 200 (or max steps 100k), early stop when highest A* reached
+- Batch size: 128 (other batch sizes are a separate series)
+- Budget: max_steps is the hard cap (default 100k); early stop on target threshold
 
 Dataset
-- CIFAR-10: train 50,000 / test 10,000; val split from train (fixed seed)
-- Batch size: 128 (optional secondary run at 256 or 512 as separate experiment)
-- DataLoader: pin_memory=True, drop_last=True, num_workers fixed per run
+- CIFAR-10: train 50k / test 10k
+- DataLoader: pin_memory=True, drop_last=True (train)
 
 Model
-- Primary baseline: clean-slate CIFAR-10 model defined under project/grad-speedup/src
-  (e.g., ResNet-18 CIFAR variant or a small CNN)
-- Optional follow-up: add a second baseline model in the same isolated codebase
+- Primary baseline: ResNet-18 CIFAR variant (conv1 3x3, stride 1, no maxpool)
+- Optional follow-up: WideResNet-28-10 or ResNet-20/32
 
-Module families (composable)
-- Module A (compute reduction): structured sparsity or linearized-Bregman style updates
-  - Initial status: planned, not in v1
-- Module B (update direction): curvature-aware or preconditioned updates
-  - Candidates: Shampoo/SOAP/Muon/Sophia (v1 should pick one feasible option)
-- Module C (step-size control): stability- or curvature-aware step rules
-  - Candidates: EoSS/Batch-Sharpness step rule, L0-L1 smooth step scaling, adaptive line search
-- Module D (external acceleration): Anderson / nonlinear acceleration
-  - Initial status: planned, add after C is stable
+Training loop requirements
+- Loss: CrossEntropyLoss (no label smoothing)
+- Logging cadence:
+  - train metrics every N steps (default 100)
+  - test acc every eval_interval_steps (default 1000) and/or per epoch
+- Early stop modes:
+  - "max": continue until highest A* reached
+  - "first": stop at first threshold reached
 
-Experiment grid (v1)
-- Baseline: SGD (momentum 0.9) and Adam (no scheduler)
-- Module C only: baseline + step-size control (1-2 variants)
-- Module B only: baseline replaced with a curvature-aware update (if implemented)
-- Module B + C: combined
+Step-time measurement
+- Use torch.cuda.Event on GPU
+- Exclude warmup steps (default 50), average next K steps (default 200)
+- Record mean step time; optionally P50/P90
+
+Module architecture (composable)
+- Base optimizer (exclusive): SGD+Momentum, AdamW
+- Step control (exclusive): None, EoSS, Adaptive Backtracking (Silver optional)
+- Geometry/clip (optional): GGNC global or layerwise
+- Outer acceleration (optional): Anderson
+- Sparsity (optional): LinBreg
+- Direction/preconditioning (SOAP/GN/etc) is handled as a separate track and not part of the base grid
+
+Experiment grid (base 72 conditions)
+- Base optimizer: {SGD, AdamW} (2)
+- Step control: {None, EoSS, Backtracking} (3)
+- Geometry: {None, GGNC global, GGNC layerwise} (3)
+- Anderson: {None, On} (2)
+- Sparsity: {None, LinBreg} (2)
+- Total: 2 * 3 * 3 * 2 * 2 = 72
+
+Seeds and statistics
+- Seeds: {0, 1, 2}
+- Report mean/std and best/worst for time-to-target
 
 Logging requirements
-- Save config.json, env.json, metrics.jsonl, summary.json
-- summary.json must include steps-to-target and time-to-target per threshold
-- Include run_id format: YYYYMMDD-grad-speedup-cifar10-<variant>
-- Output root: project/runs/grad-speedup/
+- Per run: config.json, env.json, metrics.jsonl, summary.json
+- summary.json includes per-target steps/time/cost
+- Record warmup/measure steps and hardware details
 
 Acceptance criteria (initial)
-- For at least one A* in {0.90, 0.92}: cost-to-target improves by >= 1.5x vs baseline
-- Accuracy drop at target <= 0.5 pp
+- Baseline reaches A* = 0.90 within budget
+- At least one configuration improves cost-to-target by >= 1.5x vs baseline at A*
 - No training instability (NaNs, divergence)
 
 Notes
-- Avoid mainstream optimizations (AMP, FlashAttention, generic LR schedule tuning).
-- Keep the grad-speedup codebase isolated; do not reuse project/src or run_mnist_experiment.py.
+- Keep the grad-speedup codebase isolated; do not reuse project/src.
+- Direction/preconditioning methods (SOAP/GN) are tracked separately and should not influence base-grid decisions.

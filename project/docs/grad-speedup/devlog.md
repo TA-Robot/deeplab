@@ -42,3 +42,9 @@
 - Baseline completed; winner now running. Added post-ablation plan to mirror small-cnn sweeps on resnet18.
 - Added queue runner scripts to allow sequential, appendable experiment execution without manual waiting; dashboard now surfaces run status/progress.
 - Dashboard now ingests queue.txt so queued runs appear with status=queued before execution.
+
+2026-01-06
+- Realigned grad-speedup plan/system/combination docs to the CIFAR-10 spec (72-condition grid).
+- Marked SOAP-heavy experiments as legacy; base grid now excludes direction/preconditioning track.
+- Added spec-aligned CIFAR-10 implementation doc and refreshed critical path.
+- Prepared new tickets for EoSS, grid generator/queue, and Layerwise GN.

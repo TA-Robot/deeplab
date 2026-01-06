@@ -1,5 +1,11 @@
 # Experiment Log
 
+- 2026-01-06: 20260106-grad-speedup-cifar10 (spec-aligned reset)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: planning (base grid)
+  - Notes: Aligning to CIFAR-10 spec with 72-condition grid (SGD/AdamW × step-control × clip × anderson × sparsity).
+  - Legacy: prior SOAP-heavy runs are treated as exploratory and are not used for base-grid decisions.
+
 - 2026-01-05: 20260105-grad-speedup-cifar10 (planning)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
   - Status: planning
