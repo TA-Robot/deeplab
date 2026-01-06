@@ -79,6 +79,29 @@ def truncate_label(value: str, max_len: Optional[int]) -> str:
     return value[: max_len - 3] + "..."
 
 
+def build_unique_label_map(values: Sequence[str], max_len: Optional[int]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    used: set[str] = set()
+    for raw in values:
+        base = truncate_label(raw, max_len)
+        label = base
+        if label in used:
+            idx = 2
+            while True:
+                suffix = f"#{idx}"
+                if max_len and max_len > len(suffix):
+                    trimmed = base[: max_len - len(suffix)]
+                    label = f"{trimmed}{suffix}"
+                else:
+                    label = f"{base}{suffix}"
+                if label not in used:
+                    break
+                idx += 1
+        mapping[raw] = label
+        used.add(label)
+    return mapping
+
+
 def prepare_color_column(
     df: pd.DataFrame,
     color_by: Optional[str],
@@ -90,8 +113,10 @@ def prepare_color_column(
     if not truncate:
         return df, color_by
     label_col = f"{color_by}_label"
+    unique_values = df[color_by].astype(str).dropna().unique().tolist()
+    label_map = build_unique_label_map(unique_values, max_len)
     plot_df = df.copy()
-    plot_df[label_col] = plot_df[color_by].astype(str).map(lambda v: truncate_label(v, max_len))
+    plot_df[label_col] = plot_df[color_by].astype(str).map(label_map)
     return plot_df, label_col
 
 
