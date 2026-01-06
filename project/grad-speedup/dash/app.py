@@ -109,7 +109,7 @@ def add_line_group(df: pd.DataFrame, run_id_col: Optional[str]) -> tuple[pd.Data
     return plot_df, line_group
 
 
-def apply_legend(fig, legend_position: str) -> None:
+def apply_legend(fig, legend_position: str, max_label_len: Optional[int] = None) -> None:
     legend = dict(title_text="")
     margins = dict(l=40, r=20, t=50, b=40)
     if legend_position == "bottom":
@@ -120,6 +120,8 @@ def apply_legend(fig, legend_position: str) -> None:
     else:
         legend.update(orientation="v", yanchor="top", y=1.0, xanchor="left", x=1.02)
         margins["r"] = 140
+    if legend_position != "hide":
+        fig.update_layout(showlegend=True)
     fig.update_layout(
         legend=legend,
         margin=margins,
@@ -127,6 +129,17 @@ def apply_legend(fig, legend_position: str) -> None:
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
     )
+    if max_label_len:
+        for trace in fig.data:
+            if hasattr(trace, "name") and trace.name:
+                trace.name = truncate_label(str(trace.name), max_label_len)
+
+
+def apply_hover(fig, disable: bool) -> None:
+    if not disable:
+        return
+    fig.update_traces(hoverinfo="skip", hovertemplate=None)
+    fig.update_layout(hovermode=False)
 
 
 def filter_by_run_ids(df: pd.DataFrame, run_ids: Iterable[str]) -> pd.DataFrame:
@@ -236,6 +249,11 @@ app.layout = html.Div(
                 dcc.Checklist(
                     id="show-legend-table",
                     options=[{"label": "Show legend table (full labels)", "value": "on"}],
+                    value=["on"],
+                ),
+                dcc.Checklist(
+                    id="disable-hover",
+                    options=[{"label": "Disable hover labels", "value": "on"}],
                     value=["on"],
                 ),
             ],
@@ -387,6 +405,7 @@ def build_overview_tab(
     truncate: bool,
     max_len: int,
     show_legend_table: bool,
+    disable_hover: bool,
 ) -> list:
     if runs_df.empty:
         return [html.Div("No runs available for the current filters.")]
@@ -412,7 +431,8 @@ def build_overview_tab(
         custom_data=[run_id_col] if run_id_col else None,
         title="Speed vs quality",
     )
-    apply_legend(scatter_fig, legend_position)
+    apply_legend(scatter_fig, legend_position, max_len if truncate else None)
+    apply_hover(scatter_fig, disable_hover)
 
     bar_fig = px.bar(
         plot_df,
@@ -421,7 +441,8 @@ def build_overview_tab(
         color=color_col if color_col != run_id_col else None,
         title="Speed metric by run",
     )
-    apply_legend(bar_fig, legend_position)
+    apply_legend(bar_fig, legend_position, max_len if truncate else None)
+    apply_hover(bar_fig, disable_hover)
 
     table_cols = [
         col
@@ -500,6 +521,7 @@ def build_compare_tab(
     max_len: int,
     axis_mode: str,
     show_legend_table: bool,
+    disable_hover: bool,
 ) -> list:
     if not selected_runs:
         return [html.Div("Select runs to compare.")]
@@ -536,7 +558,8 @@ def build_compare_tab(
         hover_name=run_id_col,
         title=f"Accuracy vs {axis_mode}",
     )
-    apply_legend(acc_fig, legend_position)
+    apply_legend(acc_fig, legend_position, max_len if truncate else None)
+    apply_hover(acc_fig, disable_hover)
 
     loss_metric = pick_metric(plot_steps, ["train_loss", "loss"])
     if step_x is None or loss_metric is None or plot_steps.empty:
@@ -551,7 +574,8 @@ def build_compare_tab(
             hover_name=run_id_col,
             title="Train loss overlay",
         )
-        apply_legend(loss_fig, legend_position)
+        apply_legend(loss_fig, legend_position, max_len if truncate else None)
+        apply_hover(loss_fig, disable_hover)
         loss_graph = dcc.Graph(figure=loss_fig)
 
     content = [html.Div(className="grid-2", children=[dcc.Graph(figure=acc_fig), loss_graph])]
@@ -585,6 +609,9 @@ def build_detail_tab(
     steps_df: pd.DataFrame,
     run_id: Optional[str],
     legend_position: str,
+    truncate: bool,
+    max_len: int,
+    disable_hover: bool,
 ) -> list:
     if not run_id:
         return [html.Div("Select a run to view details.")]
@@ -639,7 +666,8 @@ def build_detail_tab(
             line_group=line_group_epochs,
             title="Accuracy vs epoch",
         )
-        apply_legend(acc_fig, legend_position)
+        apply_legend(acc_fig, legend_position, max_len if truncate else None)
+        apply_hover(acc_fig, disable_hover)
         acc_graph = dcc.Graph(figure=acc_fig)
     else:
         acc_graph = html.Div("Accuracy data missing for this run.")
@@ -656,7 +684,8 @@ def build_detail_tab(
             line_group=line_group_steps,
             title="Train loss",
         )
-        apply_legend(loss_fig, legend_position)
+        apply_legend(loss_fig, legend_position, max_len if truncate else None)
+        apply_hover(loss_fig, disable_hover)
         loss_graph = dcc.Graph(figure=loss_fig)
     else:
         loss_graph = html.Div("Loss data missing for this run.")
@@ -676,6 +705,7 @@ def build_diagnostics_tab(
     legend_position: str,
     truncate: bool,
     max_len: int,
+    disable_hover: bool,
 ) -> list:
     if steps_df.empty and epochs_df.empty:
         return [html.Div("No diagnostic metrics available for the current filters.")]
@@ -701,7 +731,8 @@ def build_diagnostics_tab(
             line_group=line_group_steps,
             title="Grad norm",
         )
-        apply_legend(grad_fig, legend_position)
+        apply_legend(grad_fig, legend_position, max_len if truncate else None)
+        apply_hover(grad_fig, disable_hover)
         grad_graph = dcc.Graph(figure=grad_fig)
     else:
         grad_graph = html.Div("Grad norm missing.")
@@ -716,7 +747,8 @@ def build_diagnostics_tab(
             line_group=line_group_steps,
             title="Curvature",
         )
-        apply_legend(curv_fig, legend_position)
+        apply_legend(curv_fig, legend_position, max_len if truncate else None)
+        apply_hover(curv_fig, disable_hover)
         curv_graph = dcc.Graph(figure=curv_fig)
     else:
         curv_graph = html.Div("Curvature missing.")
@@ -731,7 +763,8 @@ def build_diagnostics_tab(
             line_group=line_group_epochs,
             title="Sparsity",
         )
-        apply_legend(sparsity_fig, legend_position)
+        apply_legend(sparsity_fig, legend_position, max_len if truncate else None)
+        apply_hover(sparsity_fig, disable_hover)
         sparsity_graph = dcc.Graph(figure=sparsity_fig)
     else:
         sparsity_graph = html.Div("Sparsity missing.")
@@ -779,6 +812,7 @@ def update_run_dropdowns(_version, models, optimizers, step_rules, directions, s
     Input("truncate-legend", "value"),
     Input("legend-max-chars", "value"),
     Input("show-legend-table", "value"),
+    Input("disable-hover", "value"),
 )
 def update_overview(
     _version,
@@ -792,6 +826,7 @@ def update_overview(
     truncate_vals,
     max_len,
     legend_table_vals,
+    disable_hover_vals,
 ):
     runs_df, epochs_df, steps_df = get_data()
     filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
@@ -805,6 +840,7 @@ def update_overview(
     filtered_steps = filter_by_run_ids(steps_df, run_ids)
     truncate = "on" in (truncate_vals or [])
     show_legend_table = "on" in (legend_table_vals or [])
+    disable_hover = "on" in (disable_hover_vals or [])
     legend_position = legend_position or "bottom"
     return build_overview_tab(
         filtered_runs,
@@ -815,6 +851,7 @@ def update_overview(
         truncate,
         max_len,
         show_legend_table,
+        disable_hover,
     )
 
 
@@ -830,6 +867,7 @@ def update_overview(
     Input("legend-position", "value"),
     Input("truncate-legend", "value"),
     Input("legend-max-chars", "value"),
+    Input("disable-hover", "value"),
 )
 def update_diagnostics(
     _version,
@@ -842,6 +880,7 @@ def update_diagnostics(
     legend_position,
     truncate_vals,
     max_len,
+    disable_hover_vals,
 ):
     runs_df, epochs_df, steps_df = get_data()
     filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
@@ -855,6 +894,7 @@ def update_diagnostics(
     filtered_steps = filter_by_run_ids(steps_df, run_ids)
     truncate = "on" in (truncate_vals or [])
     legend_position = legend_position or "bottom"
+    disable_hover = "on" in (disable_hover_vals or [])
     return build_diagnostics_tab(
         filtered_runs,
         filtered_epochs,
@@ -863,6 +903,7 @@ def update_diagnostics(
         legend_position,
         truncate,
         max_len,
+        disable_hover,
     )
 
 
@@ -881,6 +922,7 @@ def update_diagnostics(
     Input("truncate-legend", "value"),
     Input("legend-max-chars", "value"),
     Input("show-legend-table", "value"),
+    Input("disable-hover", "value"),
 )
 def update_compare(
     selected_runs,
@@ -896,6 +938,7 @@ def update_compare(
     truncate_vals,
     max_len,
     legend_table_vals,
+    disable_hover_vals,
 ):
     runs_df, epochs_df, steps_df = get_data()
     filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
@@ -908,6 +951,7 @@ def update_compare(
     selected = [rid for rid in (selected_runs or []) if rid in filtered_ids]
     truncate = "on" in (truncate_vals or [])
     show_legend_table = "on" in (legend_table_vals or [])
+    disable_hover = "on" in (disable_hover_vals or [])
     axis_mode = axis_mode or "epoch"
     return build_compare_tab(
         filtered_runs,
@@ -920,6 +964,7 @@ def update_compare(
         max_len,
         axis_mode,
         show_legend_table,
+        disable_hover,
     )
 
 
@@ -928,10 +973,24 @@ def update_compare(
     Input("detail-run", "value"),
     Input("data-version", "data"),
     State("legend-position", "value"),
+    State("truncate-legend", "value"),
+    State("legend-max-chars", "value"),
+    State("disable-hover", "value"),
 )
-def update_detail(detail_run, _version, legend_position):
+def update_detail(detail_run, _version, legend_position, truncate_vals, max_len, disable_hover_vals):
     runs_df, epochs_df, steps_df = get_data()
-    return build_detail_tab(runs_df, epochs_df, steps_df, detail_run, legend_position or "bottom")
+    truncate = "on" in (truncate_vals or [])
+    disable_hover = "on" in (disable_hover_vals or [])
+    return build_detail_tab(
+        runs_df,
+        epochs_df,
+        steps_df,
+        detail_run,
+        legend_position or "bottom",
+        truncate,
+        max_len,
+        disable_hover,
+    )
 
 
 if __name__ == "__main__":
