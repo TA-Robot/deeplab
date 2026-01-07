@@ -124,6 +124,10 @@ while true; do
   fi
 
   echo "[queue] running: $job_cmd" | tee -a "$log_file"
-  bash -lc "$job_cmd" >>"$log_file" 2>&1
-  echo "[queue] done: $job_cmd" | tee -a "$log_file"
+  if bash -lc "$job_cmd" >>"$log_file" 2>&1; then
+    echo "[queue] done: $job_cmd" | tee -a "$log_file"
+  else
+    exit_code=$?
+    echo "[queue] failed (exit=$exit_code): $job_cmd" | tee -a "$log_file"
+  fi
  done
