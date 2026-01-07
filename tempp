@@ -1,0 +1,311 @@
+レポートありがとうございます。いまの結果だけでも「壁時計で勝てる系（LinBreg / l0l1）」「序盤だけ速いが不安定な系（GGNC）」「理論的に速いが wall-clock で負ける系（SOAP/GN）」の色分けがかなり明確になっています。
+
+この先「併用で最大どこまで狙えるか」を **CIFAR-10 でちゃんと定量化**するために、いくつかだけ確認したい点があります（優先度順です）。
+
+---
+
+## 1) 比較の前提を揃えるための質問（最優先）
+
+1. **Baseline（SGD+mom0.9）のLRとスケジュールは何でしたか？**
+
+   * 例：固定LR / cosine / step decay / warmup ありなし
+     baseline が 14k で 0.85 到達が 1/3 なのは「弱い」か「設定が境界」っぽいので、ここが一番効きます。
+     （この答えで、以降の “勝った/負けた” の解釈がかなり変わります）
+
+2. **14kの `time-to-target` は「評価（test forward）時間」を含んでいますか？**
+
+   * 含むならOK（到達判定には評価が必要なので合理的）
+   * ただし `eval_interval_steps` が違う系列間は比較しにくいので、今後の設計に影響します。
+
+3. **`l0l1-only` の更新式を、実装上どう定義しましたか？**（ここは寄与分解の鍵です）
+   例えば以下のどれに近いですか？（変数定義つきで確認したいです）
+
+   * 目的関数：(f(\theta))
+   * 勾配：(g_t=\nabla f(\theta_t))
+   * 実効学習率：(\eta_t=\eta/(L_0+L_1|g_t|)) のような **(L0,L1)-GD** 型
+   * あるいは **勾配正規化/クリップ**に近い型
+     さらに、**(L_0,L_1) は固定ですか？推定ですか？**（固定なら値も）
+
+4. **`l0l1-only` で momentum=0.0 にした理由は「理論/実装上の必然」でしょうか？**
+
+   * 必然なら：比較対象の baseline も mom=0.0 を置くのが正しい
+   * 必然でないなら：`l0l1 + mom0.9` をまず1本入れるだけで、結論が早く固まります
+
+5. **14k 系列で “best checkpoint” は保存していますか？**
+   GGNCで「0.85を踏んだのに最終で下がる」が出ていますが、実運用で “目標到達で止める” なら **best時点が本質**です。
+   もし best を保存していない場合、次から
+
+   * `time-to-target@A*` は「初回到達時のcheckpoint」
+   * `final_acc` は「14k終了時」
+     を **別物として扱う**設計に寄せたいです。
+
+---
+
+## 2) モジュール実装の差が出やすいポイントの質問（重要）
+
+6. **GGNC は「どの段階の勾配」をクリップしていますか？**
+   具体的に、SGD+momentum の場合：
+
+   * (a) raw grad (g_t) をクリップ → 速度 (v_t) を更新
+   * (b) 速度 (v_t)（更新方向）をクリップ
+     のどちらですか？
+     ここが違うと、「序盤が速いが後半で精度が落ちる」挙動が起きやすさが変わります。
+
+7. **GGNC の (\rho) は“絶対値固定”ですか？それとも勾配ノルム統計（例：P90）から設定ですか？**
+   (\rho=1.0) が seed により当たり外れがあるのは、「閾値がスケールに合ってない」可能性があります。
+
+8. **LinBreg は “どのパラメータに適用”していますか？**
+
+   * 全重み（conv/FC）
+   * BN の (\gamma,\beta) も含む
+   * bias も含む
+     CIFAR-ResNetでは **BN関連にスパース化が入ると不安定化**しやすいので、そこを避けているか確認したいです。
+
+9. **LinBreg の “実際のスパース率” はどれくらい出ていますか？**（例：0になる重みの割合）
+   もしスパース率が低いのに速いなら、勝因は「演算削減」ではなく
+
+   * 正則化による最適化の容易化（到達step減）
+   * 汎化改善で test acc が早く上がる
+     のどちらかです。ここを見分けたいです。
+
+10. **Anderson acceleration は “(\theta) だけ”に適用しましたか？それとも optimizer state も含めましたか？**
+    SGD+momentum の固定点反復は状態が ((\theta, v)) なので、
+    **(\theta) だけ外挿すると不利**になることがよくあります（実装でよく起きる罠）。
+    今回 Anderson が全部遅い/悪化しやすいのは、ここが原因の可能性が高いです。
+
+---
+
+## 3) 観測の精度（time-to-target の量子化）に関する質問
+
+11. **14k 系列で “0.85到達 step” はだいたい何 step 付近でしたか？**（1000刻みでOK）
+    いまは `eval_interval_steps=1000` のため、
+    **実際には 8200 step で到達していても 9000 step 扱い**になります。
+    差が小さい手法同士（例：LinBreg vs l0l1）の比較を詰める段階では、ここがボトルネックになります。
+
+12. 可能なら：**“評価を含まない純学習時間” と “評価時間” を分離ログしていますか？**
+    `time-to-target` を厳密化するときに効きます（特に eval頻度が変わる設計を入れるなら）。
+
+---
+
+## 4) ここまでの結果から、次に「最小本数」で確かめたい再実験（提案）
+
+質問に答えてもらうのが一番ですが、並行して **次の最小セット**を走らせると寄与分解が一気に進みます（本数を増やさずに最大限情報を取る案です）。
+
+### A. momentum寄与の切り分け（最優先）
+
+* Baseline：SGD（mom=0.9）【既にあり】
+* **Baseline：SGD（mom=0.0）** ← これを追加
+* l0l1：mom=0.0【既にあり】
+* **l0l1：mom=0.9** ← 可能なら追加（無理なら理由だけ確認）
+
+これで「l0l1が速い」のが
+
+* momentum差なのか
+* l0l1則そのものなのか
+  が分離できます。
+
+### B. GGNCの“序盤だけ速い”を活かす2段運用（併用の本命）
+
+GGNCは 2k で強いので、併用の形は「ずっとかける」より **“序盤だけ”** が有望です。
+
+* **GGNC on（0〜N step）→ off（以降）** のスケジュール実装
+
+  * N候補：500 / 1000 / 2000
+  * 目的：序盤加速を得つつ、後半の精度劣化を避ける
+
+この形なら、LinBregとの併用も成立しやすいです。
+
+### C. Andersonが効かない原因の切り分け
+
+* Andersonを使うなら、SGD+momentumでは **状態 ((\theta,v)) に対して加速**する版を1本だけ試す価値があります
+  （これがダメなら “CIFARのこの領域では不要” と早期に切れます）
+
+---
+
+## 5) 最後に：現時点の「暫定結論」を私の側でどう解釈しているか
+
+* **wall-clock最適化**という目的に対して、現状のデータは
+
+  * SOAP/GN：方向計算が重すぎて不利（結論が出ている）
+  * GGNC：序盤だけは強いが、定常適用だと精度が落ちやすい（運用設計が鍵）
+  * LinBreg：再現性が高く、最終精度も上がっている（現状いちばん“堅い勝ち筋”）
+  * l0l1：最速候補だが、mom=0.0の交絡が大きい（寄与分解が必須）
+    という読みです。
+
+---
+
+上の **質問1〜5**だけでも答えが分かると、次の「併用の最大到達点（理屈上どこまで狙えるか）」を、CIFARのこの設定に即した形でかなり正確に見積もれます。
+まずはその5点、分かる範囲で教えてください。
+
+---
+
+# 回答（PM / 2026-01-07）
+
+以下、現状の実装・run config・ログから確定している範囲で回答します（不明点は不明と明記します）。
+
+## 1) 比較の前提を揃えるための質問（最優先）
+
+### 1. Baseline（SGD+mom0.9）のLRとスケジュールは？
+
+- **LR=0.1 固定**、**スケジュール無し**です（Cosine/Step decay/Warmup などは未使用）。
+- 代表:
+  - 2k: `project/runs/grad-speedup/20260106-grad-speedup-screen2000-baseline-sgd-seed0/config.json`
+  - 14k: `project/runs/grad-speedup/20260106-grad-speedup-step-baseline-resnet18-maxsteps14000-seeds012/config.json`
+- なお `warmup_steps=50` は **step time 計測のウォームアップ除外**で、学習率のwarmupではありません（LRは固定）。
+
+### 2. 14kの `time-to-target` は「評価時間」を含む？
+
+- **含みます。**
+  - 判定は `scripts/run_cifar10.py` の `_record_eval()` で `elapsed = time.perf_counter() - run_start` を記録しており、ここに test evaluation の forward（+dataloader）時間も入ります。
+- 補足: `cost_to_target_sec` は `mean_step_time_sec × steps_to_target`（=学習stepコストの近似）なので、**evalを含まない学習時間の目安**としても使えます（厳密ではないが差分の目安にはなる）。
+
+### 3. `l0l1-only` の更新式の実装定義は？
+
+- 実装は **(L0,L1)-GD（arXiv:2409.14989 Algorithm 1）**の形です（`project/grad-speedup/src/train.py` の `step_rule == "l0l1"`）。
+- 定義（実装に合わせた表記）:
+  - パラメータ: θ
+  - 勾配: g_t = ∇f(θ_t)（ここでは **全パラメータの勾配をまとめたL2ノルム**を使用）
+  - gnorm_t = ||g_t||_2
+  - ベースLR: η0（configの `lr`。今回 0.1）
+  - **実効LR: η_t = η0 / (L0 + L1·gnorm_t)**
+  - update: θ_{t+1} = θ_t − η_t · g_t（SGDの場合は同等に `optimizer.param_groups[*]["lr"]=η_t` として通常のstep）
+- パラメータは固定値:
+  - **L0=1.0, L1=0.1**
+  - 代表run: `project/runs/grad-speedup/20260106-grad-speedup-step-l0l1-only-resnet18-maxsteps14000-seeds012/config.json`
+
+### 4. `l0l1-only` で momentum=0.0 にした理由は必然？
+
+- **実装上・conformance上の必然（現実装は強制的にmom=0）**です。
+  - `step_rule == "l0l1"` の分岐で ` _zero_sgd_momentum(optimizer)` を呼び、momentumを 0 に落としてから更新します（`project/grad-speedup/src/train.py`）。
+  - そのため config 側で momentum を 0.9 にしても、内部で 0.0 に上書きされます（現状）。
+- ご指摘の通り寄与分解のためには **baseline側も mom=0.0 を置く**のが正しいです（この再実験は優先度高）。
+
+### 5. 14k 系列で “best checkpoint” は保存している？
+
+- **保存していません（現状は weight checkpoint を出していない）**です。
+  - 保存しているのは `metrics.jsonl` と `summary.json`（targets hit の step/time/acc）だけです。
+- 代替として現状できていること:
+  - `time-to-target@A*` は「初回到達時刻」を `summary.json` に保存済み。
+  - “到達したのに最終で落ちる” 問題は、**運用としては early_stop を `first` + targetを単一（例: 0.85）**にすれば解消できます（=到達で止める運用）。
+- 実装改善案:
+  - `--save-checkpoint-on-target` のようなオプションで、到達時のstate_dict保存を追加するのは可能（必要ならチケット化します）。
+
+---
+
+## 2) モジュール実装の差が出やすいポイントの質問（重要）
+
+### 6. GGNCはどの段階の勾配をクリップ？
+
+- 現実装は **(a) raw grad を EMA（d）に置換してからクリップ** → その `param.grad` を optimizer に渡す、です。
+  - `project/grad-speedup/src/train.py:_ggnc_apply()` で `state["ggnc_d"] = (1-α)d + α·g` を作り、`param.grad = d`（必要ならスケール）に差し替えます。
+  - よって momentum がある場合も、**momentumの前段（入力勾配側）**に作用します。
+
+### 7. GGNCのρは固定？分位点由来？
+
+- **固定値（絶対値）**です。分位点（P90など）からの自動設定は未実装です。
+- 2kでの ρ はスイープで探索しました（例: `rho=0.2/0.5/1.0/2.0`）。
+
+### 8. LinBregはどのパラメータに適用？
+
+- **weightテンソルのみ（ndim>1）**です。
+  - conv/linear の weight は対象
+  - bias（ndim=1）、BNのγ/β（ndim=1）は **対象外**
+  - 判定は `project/grad-speedup/src/train.py:_should_sparsify(param)`（`param.ndim > 1`）
+
+### 9. LinBreg の実際のスパース率は？
+
+- `λ=2e-4`（14k）の例では、**スパース率は低い**です（1%前後）。
+  - 例: `project/runs/grad-speedup/20260107-grad-speedup-step-linbreg-l2e-4-resnet18-maxsteps14000-seeds012/seed-0/metrics.jsonl`
+    - epoch1 train: `sparsity_fraction ≈ 0.00695`（約0.7%）
+    - epoch40 train: `sparsity_fraction ≈ 0.01158`（約1.2%）
+- したがって今回の wall-clock 改善は「演算削減」より **到達step減（最適化・正則化の効果）**が主因の可能性が高いです。
+
+### 10. Anderson acceleration は θだけ？optimizer stateも？
+
+- **θ（パラメータ）のみ**です。optimizer state（momentum bufferなど）は加速していません。
+  - 実装は `project/grad-speedup/src/train.py` の `anderson_enabled` ブロックで、flattenした θ のみを外挿して `_assign_params()` しています。
+- ご指摘の通り、SGD+momentum の固定点は (θ,v) なので、ここは **不利になり得る**です（現状の「効かない/悪化しやすい」要因候補）。
+
+---
+
+## 3) 観測の精度（time-to-target の量子化）
+
+### 11. 14k系列で “0.85到達 step” はだいたいどれくらい？
+
+（いずれも `eval_interval_steps=1000` なので 1000刻み）
+
+- Baseline: seed2のみ **14000**
+  - `20260106-grad-speedup-step-baseline-resnet18-maxsteps14000-seeds012/summary.json`
+- GGNC global (ρ=1.0): seed0 **10000** / seed2 **9000**
+  - `20260107-grad-speedup-step-ggnc-global-rho1.0-resnet18-maxsteps14000-seeds012/summary.json`
+- LinBreg (λ=2e-4): seed0 **8000** / seed1 **7000** / seed2 **10000**
+  - `20260107-grad-speedup-step-linbreg-l2e-4-resnet18-maxsteps14000-seeds012/summary.json`
+- l0l1-only: seed0 **7000** / seed1 **8000** / seed2 **8000**
+  - `20260106-grad-speedup-step-l0l1-only-resnet18-maxsteps14000-seeds012/summary.json`
+
+### 12. evalを含まない純学習時間とeval時間を分離ログしてる？
+
+- **明示的な分離ログはしていません**（time_to_target は eval を含む）。
+- ただし近似として:
+  - `mean_step_time_sec`（train stepのみ）と `steps_to_target` から `cost_to_target_sec` を算出しており、これは **evalを含まない学習コストの目安**です。
+  - `time_to_target_sec - cost_to_target_sec` が「eval等のオーバーヘッド目安」になります（粗いが比較の参考にはなる）。
+
+---
+
+## 追加実験（次に何を回すか）
+
+結論から言うと、今の結果から「併用で最大どこまで狙えるか」を詰めるには、まず **(A) 交絡の除去** と **(B) GGNCの“序盤だけ強い”を活かす設計** を優先するのがクリティカルパスです。
+
+### A. 交絡（momentum）を切り分ける（最優先・最少本数）
+
+現状:
+- `l0l1` 系は実装で mom=0.0 強制（回答4）
+- baseline は mom=0.9
+
+なのでまず以下を追加で回すのが最短です（同条件で time-to-target を比較可能にする）:
+
+1) **Baseline-mom0**（SGD, momentum=0.0）
+   - `max_steps=14,000`, seeds=0/1/2（既存baselineと同じ）
+   - 目的: `l0l1-only` の “速さ” が **l0l1則なのか / momentum差なのか** を分離
+
+2) **l0l1-only (2k)**（SGD, step_rule=l0l1）
+   - `max_steps=2,000`, seed=0（2kで早期の曲線比較）
+   - 目的: 「序盤（〜2k）で既に勝っているのか？」を把握
+
+（補足）`LinBreg` の train epoch メトリクスが壊れていたバグ（param_total が `samples` を上書き）が見つかったので修正済みです。学習曲線を正しく比較したいなら、LinBreg系は **再取得**した方が良いです（time-to-target/test acc自体は影響なし）。
+
+### B. 併用の本命：GGNC × LinBreg（“掛け算”狙い）
+
+現状:
+- GGNC global は 2k では最速級だが、14kで不安定（最終精度が落ちるseed）
+- LinBreg は 14kで堅く、再現性も良い
+
+→ 併用で狙うべき形は「GGNCをずっとかける」より **序盤だけGGNC** が本命です。
+
+追加で回したい最小セット（まずは2k→7k→14kの昇格）:
+
+3) **GGNC global (ρ=1.0, α=0.2)**（2k, seed0）
+   - 目的: α（EMA）を落として“序盤の加速”を残しつつ安定性が上がるか確認
+
+4) **GGNC global (ρ=1.0, α=0.2) + LinBreg(λ=2e-4)**（2k, seed0）
+   - 目的: 単体勝ち筋同士の掛け算が成立する兆しがあるか
+
+5) 上の(3)(4)で良ければ **7k (seeds 0/1/2)** に昇格
+   - targetはまず 0.80/0.85 あたりを置く（0.85単体だと baseline 弱いので）
+   - 目的: 「序盤だけじゃなく中盤でも wall-clock 勝ち続けるか」確認
+
+### C. EoSS/Backtracking/Anderson は当面 “保留”
+
+- EoSS: 2kで0.7未到達のため、現状は「併用候補」に上げる前に **挙動の改善/原因切り分け**が必要
+- Backtracking: 2kの最良でも baseline より遅い
+- Anderson: θのみ加速のためSGD+momentumでは不利になり得る（回答10）→ 改造するなら “状態(θ,v)版” の実装が先
+
+---
+
+## 提案: 追加実験の実行順（キュー投入順）
+
+1) Baseline mom=0.0（14k, seeds012）
+2) l0l1-only（2k, seed0）
+3) GGNC global (ρ=1.0, α=0.2)（2k, seed0）
+4) GGNC global (ρ=1.0, α=0.2) + LinBreg(λ=2e-4)（2k, seed0）
+5) （勝ち筋が見えたら）7k seeds012 に昇格

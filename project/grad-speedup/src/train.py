@@ -1926,13 +1926,13 @@ def train_one_epoch(
                                 device,
                             )
                             model._gs_dense_flops_per_sample = dense_flops_per_sample
-                        nonzero, total = _sparsity_counts(sparse_params)
-                        if total > 0:
-                            sparsity_fracs.append(1.0 - (nonzero / total))
+                        nonzero, param_total = _sparsity_counts(sparse_params)
+                        if param_total > 0:
+                            sparsity_fracs.append(1.0 - (nonzero / param_total))
                             if dense_flops_per_sample is not None and last_batch_size is not None:
                                 dense_flops = float(dense_flops_per_sample * last_batch_size)
                                 dense_flops_vals.append(dense_flops)
-                                effective_flops_vals.append(float(dense_flops * (nonzero / total)))
+                                effective_flops_vals.append(float(dense_flops * (nonzero / param_total)))
         elif not applied_update:
             if direction in ("sophia", "muon", "shampoo", "soap"):
                 _apply_manual_update(optimizer)
@@ -2101,9 +2101,9 @@ def train_one_epoch(
         if sparsity_fracs:
             sparsity_fraction = float(sum(sparsity_fracs) / len(sparsity_fracs))
         else:
-            nonzero, total = _sparsity_counts(sparse_params)
-            if total > 0:
-                sparsity_fraction = float(1.0 - (nonzero / total))
+            nonzero, param_total = _sparsity_counts(sparse_params)
+            if param_total > 0:
+                sparsity_fraction = float(1.0 - (nonzero / param_total))
         if dense_flops_vals:
             dense_flops = float(sum(dense_flops_vals) / len(dense_flops_vals))
         elif dense_flops_per_sample is not None and last_batch_size is not None:
