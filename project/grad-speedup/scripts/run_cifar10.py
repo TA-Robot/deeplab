@@ -32,6 +32,7 @@ MUON_SCALE_CHOICES = ("none", "baseline", "update-norm", "adjusted-lr")
 GN_LAYER_CHOICES = ("all", "topk", "bottomk", "randomk")
 PARAM_MODE_CHOICES = ("none", "relora")
 RELORA_SCOPE_CHOICES = ("linear", "resnet-layer4", "resnet-layer3-4", "all")
+RELORA_INIT_CHOICES = ("kaiming", "qr")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,6 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--relora-alpha", type=float, default=1.0)
     parser.add_argument("--relora-dropout", type=float, default=0.0)
     parser.add_argument("--relora-scope", choices=RELORA_SCOPE_CHOICES, default="linear")
+    parser.add_argument("--relora-init", choices=RELORA_INIT_CHOICES, default="kaiming")
     parser.add_argument("--relora-merge-interval", type=int, default=1000)
     parser.add_argument(
         "--relora-reset-optimizer",
@@ -641,6 +643,7 @@ def main() -> int:
         "relora_alpha": args.relora_alpha,
         "relora_dropout": args.relora_dropout,
         "relora_scope": args.relora_scope,
+        "relora_init": args.relora_init,
         "relora_merge_interval": args.relora_merge_interval,
         "relora_reset_optimizer": args.relora_reset_optimizer,
         "relora_prune_optimizer_fraction": args.relora_prune_optimizer_fraction,
@@ -798,6 +801,7 @@ def main() -> int:
                     scope=args.relora_scope,
                     dropout=args.relora_dropout,
                     train_bias=args.relora_train_bias,
+                    init_method=args.relora_init,
                     reset_optimizer_state=args.relora_reset_optimizer,
                     prune_optimizer_state_fraction=args.relora_prune_optimizer_fraction,
                 )

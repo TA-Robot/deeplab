@@ -338,6 +338,7 @@ def _build_run_meta(
         "relora_scope": config.get("relora_scope"),
         "relora_rank": config.get("relora_rank"),
         "relora_alpha": config.get("relora_alpha"),
+        "relora_init": config.get("relora_init"),
         "relora_merge_interval": config.get("relora_merge_interval"),
         "relora_warmstart_steps": config.get("relora_warmstart_steps"),
         "step_rule": _normalize_none(config.get("step_rule")),

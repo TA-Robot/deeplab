@@ -129,6 +129,7 @@ Notes
   - ReLoRA (arXiv:2307.05695): periodically merge/reset low-rank adapters to reduce the number of trained parameters (and optimizer state).
     - --relora-scope {linear,resnet-layer4,resnet-layer3-4,all}
     - --relora-rank, --relora-alpha, --relora-dropout
+    - --relora-init {kaiming,qr} (qr = ReLoQRa-style initialization via QR decomposition)
     - --relora-merge-interval, --relora-warmstart-steps
     - --relora-reset-optimizer/--no-relora-reset-optimizer, --relora-prune-optimizer-fraction
 - Diagnostics:

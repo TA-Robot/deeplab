@@ -50,6 +50,7 @@ Table
 | Compression | PowerSGD | arXiv:1905.13727 | audited | optional | Low-rank gradient compression |
 | Compression | Deep Gradient Compression | arXiv:1712.01887 | audited | optional | Gradient sparsification |
 | Parametrization | ReLoRA | arXiv:2307.05695 | implemented | optional | Periodic merge/reset of LoRA adapters; paper applies to linear layers. Our conv support is experimental. |
+| Parametrization | ReLoQRa (QR-init) | Amazon Science 2025 | implemented | optional | QR-based LoRA reinit after merge (enable with `--relora-init qr`). |
 | Scaling / batch | Critical Batch Size (CBS) | arXiv:1812.06162 | audited | optional | GNS / CBS estimation |
 | Scaling / batch | Super-Convergence / 1cycle | arXiv:1708.07120 | audited | optional | Aggressive LR schedule |
 | Scaling / batch | Large-batch scaling notes | arXiv:1708.03888; arXiv:1904.00962 | audited | optional | LARS/LAMB context |
@@ -134,6 +135,11 @@ ReLoRA (High-Rank Training Through Low-Rank Updates) (arXiv:2307.05695)
 - Implementation status:
   - `project/grad-speedup/src/relora.py`: ReLoRAController + ReLoRA Linear/Conv2d wrappers.
   - Paper-accurate scope is `relora_scope=linear`; conv wrapping is provided as an experimental extension for CIFAR ResNets.
+
+ReLoQRa (Approximations May Be All You Need...) (Amazon Science 2025)
+- Paper intent: reinitialize LoRA matrices using QR decomposition of the current weight, then continue ReLoRA-style merge/reset.
+- Implementation status:
+  - Enable QR init via `--relora-init qr` (default is `kaiming`).
 
 GGNC (Generalized Gradient Norm Clipping) (arXiv:2506.01913)
 - Method definition (Eq. GGNC), page 3:

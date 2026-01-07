@@ -43,6 +43,7 @@ class ReLoRALinear(ReLoRALayer):
         alpha: float,
         dropout: float = 0.0,
         train_bias: bool = False,
+        init_method: str = "kaiming",
     ) -> None:
         super().__init__()
         if rank <= 0:
@@ -57,6 +58,7 @@ class ReLoRALinear(ReLoRALayer):
         self.alpha = float(alpha)
         self.scaling = float(alpha) / float(rank)
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else None
+        self.init_method = init_method
 
         self.lora_a = nn.Linear(base.in_features, rank, bias=False)
         self.lora_b = nn.Linear(rank, base.out_features, bias=False)
@@ -85,6 +87,9 @@ class ReLoRALinear(ReLoRALayer):
 
     @torch.no_grad()
     def relora_reset(self) -> None:
+        if self.init_method == "qr":
+            if _qr_init_linear(self.base.weight, self.lora_b.weight, self.lora_a.weight, self.rank):
+                return
         _kaiming_init(self.lora_a.weight)
         _zero_init(self.lora_b.weight)
 
@@ -98,6 +103,7 @@ class ReLoRAConv2d(ReLoRALayer):
         alpha: float,
         dropout: float = 0.0,
         train_bias: bool = False,
+        init_method: str = "kaiming",
     ) -> None:
         super().__init__()
         if rank <= 0:
@@ -114,6 +120,7 @@ class ReLoRAConv2d(ReLoRALayer):
         self.alpha = float(alpha)
         self.scaling = float(alpha) / float(rank)
         self.dropout = nn.Dropout2d(dropout) if dropout > 0.0 else None
+        self.init_method = init_method
 
         self.lora_a = nn.Conv2d(
             base.in_channels,
@@ -160,8 +167,83 @@ class ReLoRAConv2d(ReLoRALayer):
 
     @torch.no_grad()
     def relora_reset(self) -> None:
+        if self.init_method == "qr":
+            if _qr_init_conv(self.base.weight, self.lora_b.weight, self.lora_a.weight, self.rank):
+                return
         _kaiming_init(self.lora_a.weight)
         _zero_init(self.lora_b.weight)
+
+
+def _qr_init_linear(
+    base_weight: torch.Tensor,
+    lora_b_weight: torch.Tensor,
+    lora_a_weight: torch.Tensor,
+    rank: int,
+) -> bool:
+    return _qr_init_from_weight(base_weight, lora_b_weight, lora_a_weight, rank)
+
+
+def _qr_init_conv(
+    base_weight: torch.Tensor,
+    lora_b_weight: torch.Tensor,
+    lora_a_weight: torch.Tensor,
+    rank: int,
+) -> bool:
+    if base_weight.ndim != 4:
+        return False
+    if rank <= 0:
+        return False
+    with torch.no_grad():
+        w = base_weight.detach()
+        dtype = w.dtype
+        w_qr = w.float() if w.dtype in (torch.float16, torch.bfloat16) else w
+        weight_2d = w_qr.flatten(1)
+        try:
+            q, r = torch.linalg.qr(weight_2d, mode="reduced")
+        except RuntimeError:
+            return False
+        k = min(rank, q.shape[1], r.shape[0])
+        if k <= 0:
+            return False
+        lora_b_weight.zero_()
+        lora_a_weight.zero_()
+        lora_b_weight[:, :k, 0, 0].copy_(q[:, :k].to(dtype))
+        lora_a_weight[:k].copy_(
+            r[:k, :].to(dtype).view(k, base_weight.shape[1], base_weight.shape[2], base_weight.shape[3])
+        )
+    return True
+
+
+def _qr_init_from_weight(
+    weight_2d: torch.Tensor,
+    lora_b_weight: torch.Tensor,
+    lora_a_weight: torch.Tensor,
+    rank: int,
+) -> bool:
+    """Initialize LoRA weights with a QR decomposition of the base weight.
+
+    Returns True if the QR init succeeded and weights were set.
+    """
+    if weight_2d.ndim != 2:
+        return False
+    if rank <= 0:
+        return False
+    with torch.no_grad():
+        w = weight_2d.detach()
+        dtype = w.dtype
+        w_qr = w.float() if w.dtype in (torch.float16, torch.bfloat16) else w
+        try:
+            q, r = torch.linalg.qr(w_qr, mode="reduced")
+        except RuntimeError:
+            return False
+        k = min(rank, q.shape[1], r.shape[0])
+        if k <= 0:
+            return False
+        lora_b_weight.zero_()
+        lora_a_weight.zero_()
+        lora_b_weight[:, :k].copy_(q[:, :k].to(dtype))
+        lora_a_weight[:k, :].copy_(r[:k, :].to(dtype))
+    return True
 
 
 def _matches_relora_scope(scope: str, full_name: str, module: nn.Module) -> bool:
@@ -198,6 +280,7 @@ class ReLoRAController:
         scope: str = "linear",
         dropout: float = 0.0,
         train_bias: bool = False,
+        init_method: str = "kaiming",
         reset_optimizer_state: bool = True,
         prune_optimizer_state_fraction: float = 0.0,
     ) -> "ReLoRAController":
@@ -205,6 +288,8 @@ class ReLoRAController:
             raise ValueError("merge_interval must be > 0 when enabling ReLoRA")
         if prune_optimizer_state_fraction < 0.0 or prune_optimizer_state_fraction >= 1.0:
             raise ValueError("prune_optimizer_state_fraction must be in [0, 1)")
+        if init_method not in ("kaiming", "qr"):
+            raise ValueError(f"unsupported ReLoRA init_method: {init_method}")
 
         layers: list[ReLoRALayer] = []
 
@@ -214,11 +299,21 @@ class ReLoRAController:
                 if _matches_relora_scope(scope, full_name, child):
                     if isinstance(child, nn.Linear):
                         wrapped: ReLoRALayer = ReLoRALinear(
-                            child, rank=rank, alpha=alpha, dropout=dropout, train_bias=train_bias
+                            child,
+                            rank=rank,
+                            alpha=alpha,
+                            dropout=dropout,
+                            train_bias=train_bias,
+                            init_method=init_method,
                         )
                     elif isinstance(child, nn.Conv2d):
                         wrapped = ReLoRAConv2d(
-                            child, rank=rank, alpha=alpha, dropout=dropout, train_bias=train_bias
+                            child,
+                            rank=rank,
+                            alpha=alpha,
+                            dropout=dropout,
+                            train_bias=train_bias,
+                            init_method=init_method,
                         )
                     else:
                         continue

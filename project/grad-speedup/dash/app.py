@@ -42,6 +42,7 @@ COLOR_CANDIDATES = [
     "model",
     "optimizer",
     "param_mode",
+    "relora_init",
     "step_rule",
     "direction",
     "clip_mode",
@@ -130,6 +131,7 @@ def summarize_run(row: pd.Series) -> str:
             scope = str(row.get("relora_scope", "")).strip()
             rank = row.get("relora_rank")
             interval = row.get("relora_merge_interval")
+            init_method = str(row.get("relora_init", "")).strip()
             extras = []
             if scope and scope.lower() != "none":
                 extras.append(scope)
@@ -137,6 +139,8 @@ def summarize_run(row: pd.Series) -> str:
                 extras.append(f"r{int(rank)}")
             if isinstance(interval, (int, float)) and float(interval) > 0:
                 extras.append(f"T{int(interval)}")
+            if init_method and init_method.lower() not in ("", "none", "kaiming"):
+                extras.append(init_method)
             if extras:
                 detail = f" ({' '.join(extras)})"
         pieces.append(f"param:{param_mode}{detail}")
@@ -843,6 +847,7 @@ def build_overview_tab(
         speed_metric,
         quality_metric,
         "param_mode",
+        "relora_init",
         "model",
         "optimizer",
         "step_rule",
