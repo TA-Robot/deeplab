@@ -8,6 +8,8 @@ __pycache__/
 .vscode/
 temp
 project/grad-speedup/queue/queue.txt
+project/grad-speedup/queue/queue.lock
 project/runs/
 !project/runs/.gitkeep
 project/data/
+project/docs/grad-speedup/papers/*.pdf

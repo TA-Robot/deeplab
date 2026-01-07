@@ -63,6 +63,11 @@
   - 代替案: Streamlit を継続改善 / 外部BIツールに移行
   - 影響: ダッシュボードは Dash を主導線に切り替え、`dash/app.py` を起点に運用する
 
+- 2026-01-07: grad-speedup の論文 PDF は Git にコミットせず、参照情報のみ残す
+  - 背景: PDF は大きいバイナリであり、repo を肥大化させる／運用上は `project/runs/`（VCS対象外）に置くのが適切
+  - 代替案: `project/docs/grad-speedup/papers/` にPDFをコミットし続ける / 別ストレージ（LFS等）で管理
+  - 影響: `project/docs/grad-speedup/papers/README.md` は arXiv ID と読むべき箇所のメモに限定し、PDF は `project/runs/grad-speedup/_papers/` に保存する運用に変更
+
 - YYYY-MM-DD: `<<判断>>`
   - 背景: `<<背景>>`
   - 代替案: `<<代替案>>`
