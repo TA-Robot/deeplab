@@ -498,18 +498,8 @@ def _append_target_rows(
 
 
 def _derive_target_metrics(row: Dict[str, Any], mean_step_time_sec: Optional[float]) -> None:
-    steps = _coerce_float(row.get("steps_to_target"))
-    if steps is None or mean_step_time_sec is None:
-        return
-    try:
-        steps_value = float(steps)
-        mean_step_time = float(mean_step_time_sec)
-    except (TypeError, ValueError):
-        return
-    if row.get("time_to_target_sec") is None:
-        row["time_to_target_sec"] = steps_value * mean_step_time
-    if row.get("cost_to_target_sec") is None:
-        row["cost_to_target_sec"] = steps_value * mean_step_time
+    # Keep target timing as recorded by the run; do not derive from mean step time.
+    return
 
 
 def _derive_epoch_metrics(row: Dict[str, Any]) -> None:

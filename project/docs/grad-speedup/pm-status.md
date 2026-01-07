@@ -1,12 +1,13 @@
 # Grad-Speedup PM Status
 
-Date: 2026-01-06
+Date: 2026-01-07
 Owner: PM
 
 Current state
 - Spec alignment: updated plan/system/combination docs to the CIFAR-10 spec (72-condition grid).
-- Base-grid methods: Backtracking/GGNC/Anderson/LinBreg exist but need spec validation; EoSS implementation pending.
-- Direction track: Layerwise GN ticket created; SOAP is deprioritized (legacy only).
+- Base-grid methods: EoSS implemented; screen2000 validation complete; tune2000 sweep running.
+- Direction track: Layerwise GN paperpack + reference implementation done; excluded from active experiments due to heavy compute.
+- GN-lite: gn-layerwise-exact now supports top/bottom/random-k layer selection with logging for profiling.
 - Dashboard: Dash UI in place; supports time/steps/cost-to-target with legend table.
 
 Primary docs
@@ -17,20 +18,16 @@ Primary docs
 - Method conformance: project/docs/grad-speedup/method-conformance.md
 
 Tickets (running)
-- EoSS step-control implementation (HVP + EMA)
-- 72-condition grid config generator
-- Queue runner update (grid support)
-- Layerwise GN implementation (separate direction track)
+- None (Layerwise GN track parked after compute-cost review)
 
 Experiments
 - Legacy SOAP-focused runs are no longer used for decision-making.
-- Base-grid runs have not started yet (waiting on EoSS + grid generator).
+- Screen2000 baseline sweep done; tune2000 sweeps running via queue runner.
 
 Next PM actions
-- Create/assign sub-agent tickets for EoSS, grid generator, queue runner, Layerwise GN.
-- Update experiment-log.md with new base-grid run plan once configs exist.
-- Kick off baseline runs (SGD/AdamW) with max_steps + eval_interval_steps=1000.
+- Monitor tune2000 results and promote top configs to 7k/14k runs.
+- Start 72-condition grid once generator is ready (if still required).
+- Shift dashboard comparisons to time-to-target (drop mean step time as primary).
 
 Risks / blockers
-- EoSS implementation is the critical blocker for the base grid.
-- LinBreg and GGNC need paper-conformance verification before inclusion in grid.
+- Grid generator still pending for full 72-condition sweep.

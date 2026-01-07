@@ -11,11 +11,19 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
+try:
+    from torch.func import functional_call as _torch_functional_call
+
+    _HAS_TORCH_FUNC = True
+except Exception:
+    _HAS_TORCH_FUNC = False
+    from torch.nn.utils.stateless import functional_call as _stateless_functional_call
 
 from .modules import SUPPORTED_CLIP_MODES, SUPPORTED_DIRECTIONS, SUPPORTED_SPARSITY, SUPPORTED_STEP_RULES
 
 MUON_NS_COEFFS = (3.4445, -4.7750, 2.0315)
 MUON_SCALE_MODES = ("none", "baseline", "update-norm", "adjusted-lr")
+GN_LAYER_MODES = ("all", "topk", "bottomk", "randomk")
 
 @dataclass
 class TrainMetrics:
@@ -64,6 +72,11 @@ class TrainMetrics:
     precond_update_time_s: Optional[float] = None
     precond_apply_time_s: Optional[float] = None
     precond_layer_stats: Optional[list[Dict[str, Any]]] = None
+    gn_update_count: int = 0
+    gn_apply_count: int = 0
+    gn_update_time_s: Optional[float] = None
+    gn_apply_time_s: Optional[float] = None
+    gn_layer_stats: Optional[list[Dict[str, Any]]] = None
     data_wait_time_s: Optional[float] = None
     max_memory_bytes: Optional[int] = None
     sparsity_fraction: Optional[float] = None
@@ -95,6 +108,10 @@ class StepLog:
     step_time_ms: Optional[float] = None
     line_search_iters: Optional[int] = None
     line_search_accepted: Optional[bool] = None
+    gn_selected_count: Optional[int] = None
+    gn_selected_layers: Optional[list[str]] = None
+    gn_update_time_ms: Optional[float] = None
+    gn_apply_time_ms: Optional[float] = None
 
 
 def set_seed(seed: int, deterministic: bool = False) -> None:
@@ -134,6 +151,47 @@ def _sum_tensor_sq(tensors: Iterable[torch.Tensor]) -> torch.Tensor:
     if total is None:
         return torch.tensor(0.0)
     return total
+
+
+def _select_gn_layer_indices(
+    eligible_indices: list[int],
+    mode: str,
+    k: int,
+    seed: int,
+    global_step: int,
+    random_every_step: bool,
+    step_state: Dict[str, Any],
+) -> list[int]:
+    if mode not in GN_LAYER_MODES:
+        raise ValueError(f"unsupported gn_layer_mode: {mode}")
+    if not eligible_indices:
+        return []
+    if mode == "all":
+        return list(eligible_indices)
+    if k <= 0:
+        return []
+    if k >= len(eligible_indices):
+        return list(eligible_indices)
+    if mode == "topk":
+        return list(eligible_indices[-k:])
+    if mode == "bottomk":
+        return list(eligible_indices[:k])
+    if mode == "randomk":
+        if random_every_step:
+            rng = random.Random(seed + global_step)
+            return sorted(rng.sample(eligible_indices, k))
+        fixed = step_state.get("gn_layer_fixed_indices")
+        if fixed and fixed.get("k") == k and fixed.get("eligible_count") == len(eligible_indices):
+            return list(fixed["indices"])
+        rng = random.Random(seed)
+        indices = sorted(rng.sample(eligible_indices, k))
+        step_state["gn_layer_fixed_indices"] = {
+            "indices": indices,
+            "k": k,
+            "eligible_count": len(eligible_indices),
+        }
+        return indices
+    raise ValueError(f"unsupported gn_layer_mode: {mode}")
 
 
 def compute_grad_norm(params: Iterable[torch.Tensor]) -> float:
@@ -400,6 +458,61 @@ def _muon_scale_factor(
     raise ValueError(f"unsupported muon_scale_mode: {mode}")
 
 
+def _functional_call(
+    model: nn.Module,
+    params: Dict[str, torch.Tensor],
+    buffers: Dict[str, torch.Tensor],
+    args: tuple[Any, ...],
+) -> torch.Tensor:
+    if _HAS_TORCH_FUNC:
+        return _torch_functional_call(model, (params, buffers), args)
+    merged: Dict[str, torch.Tensor] = dict(params)
+    merged.update(buffers)
+    return _stateless_functional_call(model, merged, args)
+
+
+def _cg_solve(
+    matvec: Callable[[torch.Tensor], torch.Tensor],
+    rhs: torch.Tensor,
+    max_iters: int,
+    tol: float,
+    eps: float,
+) -> tuple[torch.Tensor, int, float]:
+    if rhs.numel() == 0:
+        return rhs, 0, 0.0
+    b_norm = float(torch.linalg.norm(rhs).item())
+    if not math.isfinite(b_norm) or b_norm <= eps:
+        return torch.zeros_like(rhs), 0, 0.0
+    x = torch.zeros_like(rhs)
+    r = rhs - matvec(x)
+    r_norm = float(torch.linalg.norm(r).item())
+    if not math.isfinite(r_norm):
+        return torch.zeros_like(rhs), 0, r_norm
+    if r_norm <= tol * b_norm:
+        return x, 0, r_norm
+    p = r.clone()
+    rs_old = torch.dot(r, r)
+    iters = 0
+    for it in range(1, max_iters + 1):
+        iters = it
+        Ap = matvec(p)
+        denom = torch.dot(p, Ap)
+        if not torch.isfinite(denom) or float(abs(denom).item()) <= eps:
+            break
+        alpha = rs_old / denom
+        x = x + alpha * p
+        r = r - alpha * Ap
+        rs_new = torch.dot(r, r)
+        if not torch.isfinite(rs_new):
+            break
+        r_norm = float(torch.sqrt(rs_new).item())
+        if r_norm <= tol * b_norm:
+            return x, iters, r_norm
+        p = r + (rs_new / rs_old) * p
+        rs_old = rs_new
+    return x, iters, float(torch.sqrt(rs_old).item())
+
+
 class StepTimer:
     def __init__(self, device: torch.device) -> None:
         self.device = device
@@ -539,6 +652,14 @@ def train_one_epoch(
     direction_beta1: float = 0.9,
     direction_damping: float = 1e-5,
     direction_update_every: int = 1,
+    direction_max_size: int = 0,
+    gn_cg_iters: int = 10,
+    gn_cg_tol: float = 1e-4,
+    gn_layer_mode: str = "all",
+    gn_layer_k: int = 0,
+    gn_layer_random_every_step: bool = True,
+    gn_layer_seed: int = 0,
+    gn_update_interval: int = 1,
     sophia_beta1: float = 0.96,
     sophia_beta2: float = 0.99,
     sophia_gamma: float = 0.01,
@@ -618,7 +739,7 @@ def train_one_epoch(
             raise ValueError("sparsity_update_interval must be > 0 when sparsity is enabled")
     if anderson_memory < 0 or anderson_interval < 0:
         raise ValueError("anderson_memory and anderson_interval must be >= 0")
-    if direction in ("shampoo", "soap"):
+    if direction in ("shampoo", "soap", "gn-layerwise", "gn-layerwise-exact"):
         if direction_damping < 0.0:
             raise ValueError("direction_damping must be >= 0")
     if direction == "shampoo":
@@ -631,6 +752,36 @@ def train_one_epoch(
             raise ValueError("direction_beta must be in [0, 1)")
         if direction_eps <= 0.0:
             raise ValueError("direction_eps must be > 0")
+    if direction == "gn-layerwise":
+        if not 0.0 <= direction_beta <= 1.0:
+            raise ValueError("direction_beta must be in [0, 1] for gn-layerwise")
+        if direction_eps <= 0.0:
+            raise ValueError("direction_eps must be > 0 for gn-layerwise")
+        if direction_max_size < 0:
+            raise ValueError("direction_max_size must be >= 0 for gn-layerwise")
+    if direction == "gn-layerwise-exact":
+        if gn_layer_mode not in GN_LAYER_MODES:
+            raise ValueError(f"gn_layer_mode must be one of {GN_LAYER_MODES}")
+        if gn_layer_mode != "all" and gn_layer_k <= 0:
+            raise ValueError("gn_layer_k must be > 0 when gn_layer_mode is not 'all'")
+        if gn_layer_k < 0:
+            raise ValueError("gn_layer_k must be >= 0")
+        if gn_update_interval < 1:
+            raise ValueError("gn_update_interval must be >= 1")
+        if gn_cg_iters <= 0:
+            raise ValueError("gn_cg_iters must be > 0 for gn-layerwise-exact")
+        if gn_cg_tol <= 0.0:
+            raise ValueError("gn_cg_tol must be > 0 for gn-layerwise-exact")
+        if not 0.0 < step_backtrack_c < 1.0:
+            raise ValueError("step_backtrack_c must be in (0, 1) for gn-layerwise-exact line search")
+        if step_backtrack_max <= 0:
+            raise ValueError("step_backtrack_max must be > 0 for gn-layerwise-exact line search")
+        if not 0.0 < step_backtrack_rho < 1.0:
+            raise ValueError("step_backtrack_rho must be in (0, 1) for gn-layerwise-exact line search")
+        if step_rule != "none":
+            raise ValueError("gn-layerwise-exact requires step_rule='none' to use its line search")
+        if not isinstance(optimizer, torch.optim.SGD):
+            raise ValueError("gn-layerwise-exact requires an SGD optimizer")
     if direction == "sophia":
         if not 0.0 <= sophia_beta1 < 1.0:
             raise ValueError("sophia_beta1 must be in [0, 1)")
@@ -674,11 +825,32 @@ def train_one_epoch(
 
     params: list[torch.Tensor] = []
     param_names: Dict[int, str] = {}
+    params_by_name: Dict[str, torch.Tensor] = {}
     for name, param in model.named_parameters():
         if not param.requires_grad:
             continue
         params.append(param)
         param_names[id(param)] = name
+        params_by_name[name] = param
+    buffers_by_name: Dict[str, torch.Tensor] = {name: buf for name, buf in model.named_buffers()}
+    gn_eligible_indices: list[int] = []
+    gn_layer_stats: Dict[str, Dict[str, Any]] = {}
+    if direction == "gn-layerwise-exact":
+        gn_eligible_indices = [idx for idx, param in enumerate(params) if param.ndim >= 2]
+        for idx in gn_eligible_indices:
+            param = params[idx]
+            name = param_names.get(id(param), f"param_{idx}")
+            gn_layer_stats[name] = {
+                "name": name,
+                "shape": list(param.shape),
+                "order": param.ndim,
+                "gn_selected": False,
+                "gn_selected_count": 0,
+                "gn_layer_mode": gn_layer_mode,
+                "gn_layer_k": gn_layer_k,
+                "gn_layer_random_every_step": gn_layer_random_every_step,
+                "gn_update_interval": gn_update_interval,
+            }
     sparsity_enabled = sparsity != "none"
     sparse_params: list[torch.Tensor] = []
     if sparsity_enabled:
@@ -722,6 +894,10 @@ def train_one_epoch(
     precond_update_time_s = 0.0
     precond_apply_time_s = 0.0
     precond_layer_stats: Dict[str, Dict[str, Any]] = {}
+    gn_update_count = 0
+    gn_apply_count = 0
+    gn_update_time_s = 0.0
+    gn_apply_time_s = 0.0
     sparsity_fracs: list[float] = []
     dense_flops_vals: list[float] = []
     effective_flops_vals: list[float] = []
@@ -762,22 +938,61 @@ def train_one_epoch(
             params_flat_before = _flatten_params(params)
         output = model(data)
         loss = F.cross_entropy(output, target)
+        gn_selected_indices: list[int] = []
+        gn_selected_names: list[str] = []
+        gn_selected_count: Optional[int] = None
+        gn_update_time_s_step: Optional[float] = None
+        gn_apply_time_s_step: Optional[float] = None
+        gn_refresh = True
+        gn_cached_updates = None
+        if direction == "gn-layerwise-exact":
+            gn_refresh = gn_update_interval <= 1 or (global_step % gn_update_interval == 0)
+            gn_cached_updates = step_state.get("gn_cached_updates")
+            if gn_cached_updates is None or len(gn_cached_updates) != len(params):
+                gn_cached_updates = [None for _ in params]
+                step_state["gn_cached_updates"] = gn_cached_updates
+            gn_selected_indices = _select_gn_layer_indices(
+                gn_eligible_indices,
+                gn_layer_mode,
+                gn_layer_k,
+                gn_layer_seed,
+                global_step,
+                gn_layer_random_every_step,
+                step_state,
+            )
+            gn_selected_indices = sorted(gn_selected_indices)
+            gn_selected_names = [
+                param_names.get(id(params[idx]), f"param_{idx}") for idx in gn_selected_indices
+            ]
+            gn_selected_count = len(gn_selected_indices)
+            gn_update_time_s_step = 0.0
+            gn_apply_time_s_step = 0.0
+            if gn_layer_stats:
+                for stats in gn_layer_stats.values():
+                    stats["gn_selected"] = False
+                for name in gn_selected_names:
+                    stats = gn_layer_stats.get(name)
+                    if stats is not None:
+                        stats["gn_selected"] = True
+                        stats["gn_selected_count"] += 1
         curvature = None
         grad_norm = None
         grad_norm_sq_val = None
+        gn_grad_dot = None
         needs_grad_norm = step_rule in ("l0l1", "sps", "sps-momentum", "adaptive-backtracking") or (
             grad_norm_every > 0 and global_step % grad_norm_every == 0
         )
         needs_grad_norm_sq = step_rule in ("sps", "sps-momentum", "adaptive-backtracking") or needs_grad_norm
+        use_gn = direction == "gn-layerwise-exact"
         use_sophia_hessian = direction == "sophia" and (global_step % sophia_hessian_every == 0)
         use_eoss_hvp = step_rule == "eoss" and step_eoss_interval > 0 and (global_step % step_eoss_interval == 0)
         eoss_curvature = None
         sophia_diag_estimates: dict[torch.Tensor, torch.Tensor] = {}
-        if use_sophia_hessian or step_rule == "eoss":
+        if use_gn or use_sophia_hessian or step_rule == "eoss":
             grads = torch.autograd.grad(
                 loss,
                 params,
-                create_graph=use_sophia_hessian or use_eoss_hvp,
+                create_graph=use_gn or use_sophia_hessian or use_eoss_hvp,
                 allow_unused=True,
             )
             grads_used = []
@@ -870,6 +1085,129 @@ def train_one_epoch(
         if curvature is not None:
             curvatures.append(curvature)
 
+        if use_gn:
+            _maybe_sync(device, precond_sync)
+            gn_start = time.perf_counter()
+            grad_logits = torch.autograd.grad(loss, output, create_graph=True)[0]
+            gn_grad_dot_val = 0.0
+            selected_set = set(gn_selected_indices)
+            gn_updated_any = False
+            for idx, (param, grad) in enumerate(zip(params, grads)):
+                name = param_names.get(id(param), f"param_{idx}")
+                if grad is None:
+                    param.grad = None
+                    continue
+                if idx not in selected_set:
+                    param.grad = grad.detach()
+                    gn_grad_dot_val += float((grad.detach() * param.grad).sum().item())
+                    continue
+                cached_update = None
+                if gn_cached_updates is not None:
+                    cached_update = gn_cached_updates[idx]
+                if not gn_refresh and cached_update is not None:
+                    param.grad = cached_update
+                    gn_grad_dot_val += float((grad.detach() * param.grad).sum().item())
+                    continue
+                layer_start = time.perf_counter() if diagnostics else 0.0
+                matvec_time_s = 0.0
+                matvec_calls = 0
+                grad_detached = grad.detach()
+                flat_grad = grad_detached.reshape(-1)
+                grad_norm_val = float(torch.linalg.norm(flat_grad).item())
+                if not math.isfinite(grad_norm_val) or grad_norm_val <= step_eps:
+                    update = torch.zeros_like(param)
+                    cg_iters = 0
+                    residual_norm = 0.0
+                else:
+                    def _forward_with_param(p: torch.Tensor) -> torch.Tensor:
+                        local_params = dict(params_by_name)
+                        local_params[name] = p
+                        return _functional_call(model, local_params, buffers_by_name, (data,))
+
+                    def _matvec(vec_flat: torch.Tensor) -> torch.Tensor:
+                        nonlocal matvec_time_s, matvec_calls
+                        mv_start = time.perf_counter() if diagnostics else 0.0
+                        vec = vec_flat.view_as(param)
+                        _, jvp_out = torch.autograd.functional.jvp(
+                            _forward_with_param,
+                            (param,),
+                            (vec,),
+                            create_graph=False,
+                        )
+                        hl_jv = torch.autograd.grad(
+                            grad_logits,
+                            output,
+                            grad_outputs=jvp_out,
+                            retain_graph=True,
+                        )[0]
+                        gv = torch.autograd.grad(
+                            output,
+                            param,
+                            grad_outputs=hl_jv,
+                            retain_graph=True,
+                            allow_unused=True,
+                        )[0]
+                        if gv is None:
+                            gv = torch.zeros_like(param)
+                        if direction_damping > 0.0:
+                            gv = gv + direction_damping * vec
+                        if diagnostics:
+                            matvec_time_s += time.perf_counter() - mv_start
+                            matvec_calls += 1
+                        return gv.reshape(-1)
+
+                    update_flat, cg_iters, residual_norm = _cg_solve(
+                        _matvec,
+                        flat_grad,
+                        gn_cg_iters,
+                        gn_cg_tol,
+                        step_eps,
+                    )
+                    update = update_flat.view_as(param)
+                    if not torch.isfinite(update).all():
+                        update = torch.zeros_like(param)
+                param.grad = update.detach()
+                gn_grad_dot_val += float((grad_detached * param.grad).sum().item())
+                update_norm_val = float(torch.linalg.norm(param.grad.reshape(-1)).item())
+                layer_stats = precond_layer_stats.get(name)
+                if layer_stats is None:
+                    layer_stats = {
+                        "name": name,
+                        "shape": list(param.shape),
+                        "order": param.ndim,
+                    }
+                    precond_layer_stats[name] = layer_stats
+                denom = max(grad_norm_val, step_eps)
+                layer_stats.update(
+                    {
+                        "method": "gn-layerwise-exact",
+                        "gn_cg_iters": int(cg_iters),
+                        "gn_residual_norm": float(residual_norm),
+                        "gn_rel_residual": float(residual_norm / denom),
+                        "gn_grad_norm": float(grad_norm_val),
+                        "gn_update_norm": float(update_norm_val),
+                        "gn_damping": float(direction_damping),
+                    }
+                )
+                if diagnostics:
+                    layer_stats["gn_solve_time_s"] = float(time.perf_counter() - layer_start)
+                    layer_stats["gn_matvec_time_s"] = float(matvec_time_s)
+                    layer_stats["gn_matvec_calls"] = int(matvec_calls)
+                if gn_cached_updates is not None:
+                    gn_cached_updates[idx] = param.grad.detach()
+                gn_updated_any = True
+            gn_grad_dot = gn_grad_dot_val
+            if gn_updated_any:
+                _maybe_sync(device, precond_sync)
+                gn_elapsed = time.perf_counter() - gn_start
+                precond_update_time_s += gn_elapsed
+                precond_update_count += 1
+                precond_apply_count += 1
+                if selected_set:
+                    gn_update_time_s += gn_elapsed
+                    gn_update_time_s_step = gn_elapsed
+                    gn_update_count += 1
+
         if clip_mode != "none":
             coef = _ggnc_apply(params, optimizer, clip_rho, clip_alpha, step_eps, clip_mode)
             clip_coefs.append(float(coef))
@@ -898,6 +1236,149 @@ def train_one_epoch(
                 scale = (ema + direction_eps).rsqrt()
                 param.grad.mul_(scale)
                 scale_vals.append(float(scale.mean().item()))
+            if scale_vals:
+                direction_scales.append(float(sum(scale_vals) / len(scale_vals)))
+        elif direction == "gn-layerwise":
+            # NOTE: Proxy implementation using a diagonal empirical Fisher (EMA of g^2).
+            # This is *not* the paper-accurate layerwise GN update; treat as experimental.
+            if direction_update_every <= 0:
+                direction_update_every = 1
+            update_precond = global_step % direction_update_every == 0
+            scale_vals: list[float] = []
+            with torch.no_grad():
+                for idx, param in enumerate(params):
+                    grad = param.grad
+                    if grad is None:
+                        continue
+                    name = param_names.get(id(param), f"param_{idx}")
+                    layer_stats = precond_layer_stats.get(name)
+                    if layer_stats is None:
+                        layer_stats = {
+                            "name": name,
+                            "shape": list(param.shape),
+                            "order": param.ndim,
+                            "stat_updates": 0,
+                            "precond_updates": 0,
+                            "apply_count": 0,
+                            "stat_update_time_s": 0.0,
+                            "precond_update_time_s": 0.0,
+                            "update_time_s": 0.0,
+                            "apply_time_s": 0.0,
+                            "scale_count": 0,
+                            "note": "proxy_diag_fisher",
+                        }
+                        precond_layer_stats[name] = layer_stats
+
+                    if grad.ndim <= 1:
+                        layer_stats["mode"] = "skip"
+                        continue
+
+                    state = optimizer.state[param]
+                    mode = "diag"
+                    if direction_max_size > 0 and grad.numel() > direction_max_size:
+                        mode = "scalar"
+                    layer_stats["mode"] = mode
+                    layer_stats["damping"] = float(direction_damping)
+                    layer_stats["eps"] = float(direction_eps)
+                    layer_stats["beta"] = float(direction_beta)
+                    layer_stats["update_every"] = int(direction_update_every)
+
+                    if mode == "scalar":
+                        needs_update = update_precond or "gn_scalar" not in state
+                    else:
+                        diag_state = state.get("gn_diag")
+                        needs_update = update_precond or diag_state is None or diag_state.shape != grad.shape
+
+                    if needs_update:
+                        _maybe_sync(device, precond_sync)
+                        update_start = time.perf_counter()
+                        if mode == "scalar":
+                            ggn_value = float(grad.detach().pow(2).mean().item())
+                            prev_value = state.get("gn_scalar")
+                            if prev_value is None:
+                                new_value = ggn_value
+                            else:
+                                new_value = direction_beta * float(prev_value) + (1.0 - direction_beta) * ggn_value
+                            state["gn_scalar"] = new_value
+                            layer_stats["ggn_mean"] = new_value
+                        else:
+                            ggn_est = grad.detach().pow(2)
+                            prev = state.get("gn_diag")
+                            if prev is None or prev.shape != ggn_est.shape:
+                                prev = ggn_est.clone()
+                            else:
+                                prev.mul_(direction_beta).add_(ggn_est, alpha=1.0 - direction_beta)
+                            state["gn_diag"] = prev
+                            layer_stats["ggn_mean"] = float(prev.mean().item())
+                        _maybe_sync(device, precond_sync)
+                        update_elapsed = time.perf_counter() - update_start
+                        precond_update_time_s += update_elapsed
+                        precond_update_count += 1
+                        layer_stats["stat_updates"] += 1
+                        layer_stats["precond_updates"] += 1
+                        layer_stats["stat_update_time_s"] += update_elapsed
+                        layer_stats["precond_update_time_s"] += update_elapsed
+                        layer_stats["update_time_s"] += update_elapsed
+
+                    _maybe_sync(device, precond_sync)
+                    apply_start = time.perf_counter()
+                    scale_mean = None
+                    scale_min = None
+                    scale_max = None
+                    if mode == "scalar":
+                        ggn_value = state.get("gn_scalar")
+                        if ggn_value is None:
+                            continue
+                        denom = float(ggn_value) + direction_damping
+                        if not math.isfinite(denom):
+                            grad.zero_()
+                            continue
+                        if denom <= direction_eps:
+                            denom = direction_eps
+                        scale = 1.0 / denom
+                        grad.mul_(scale)
+                        scale_mean = float(scale)
+                        scale_min = float(scale)
+                        scale_max = float(scale)
+                    else:
+                        ggn_diag = state.get("gn_diag")
+                        if ggn_diag is None:
+                            continue
+                        denom = ggn_diag + direction_damping
+                        denom = denom.clamp_min(direction_eps)
+                        if not torch.isfinite(denom).all():
+                            grad.zero_()
+                        else:
+                            scale = denom.reciprocal()
+                            grad.mul_(scale)
+                            scale_mean = float(scale.mean().item())
+                            scale_min = float(scale.min().item())
+                            scale_max = float(scale.max().item())
+                    _maybe_sync(device, precond_sync)
+                    apply_elapsed = time.perf_counter() - apply_start
+                    precond_apply_time_s += apply_elapsed
+                    precond_apply_count += 1
+                    layer_stats["apply_count"] += 1
+                    layer_stats["apply_time_s"] += apply_elapsed
+
+                    if scale_mean is not None:
+                        scale_vals.append(scale_mean)
+                        prev_count = int(layer_stats.get("scale_count", 0))
+                        prev_mean = layer_stats.get("scale_mean")
+                        new_count = prev_count + 1
+                        if prev_mean is None:
+                            layer_stats["scale_mean"] = scale_mean
+                        else:
+                            layer_stats["scale_mean"] = (prev_mean * prev_count + scale_mean) / new_count
+                        layer_stats["scale_count"] = new_count
+                        if scale_min is not None:
+                            prev_min = layer_stats.get("scale_min")
+                            if prev_min is None or scale_min < prev_min:
+                                layer_stats["scale_min"] = scale_min
+                        if scale_max is not None:
+                            prev_max = layer_stats.get("scale_max")
+                            if prev_max is None or scale_max > prev_max:
+                                layer_stats["scale_max"] = scale_max
             if scale_vals:
                 direction_scales.append(float(sum(scale_vals) / len(scale_vals)))
         elif direction in ("shampoo", "soap"):
@@ -1127,7 +1608,68 @@ def train_one_epoch(
         line_search_accepted_step = None
         applied_update = False
         loss_value = float(loss.item())
-        if step_rule != "none":
+        if direction == "gn-layerwise-exact":
+            apply_timer_start = time.perf_counter()
+            _zero_sgd_momentum(optimizer)
+            start_lr = optimizer.param_groups[0]["lr"] if optimizer.param_groups else 1.0
+            start_lr = float(start_lr)
+            if not math.isfinite(start_lr) or start_lr <= 0.0:
+                start_lr = 1.0
+
+            if gn_grad_dot is None or not math.isfinite(float(gn_grad_dot)) or gn_grad_dot <= step_eps:
+                line_search_attempts += 1
+                line_search_rejected += 1
+                line_search_iters = 0
+                line_search_accepted_step = False
+                step_size = start_lr
+                for group in optimizer.param_groups:
+                    group["lr"] = start_lr
+                _apply_manual_update(optimizer)
+                applied_update = True
+            else:
+                param_snapshot = [param.detach().clone() for param in params]
+                buffer_snapshot = [buf.detach().clone() for buf in model.buffers()]
+                line_search_attempts += 1
+
+                for attempt in range(1, step_backtrack_max + 1):
+                    line_search_iters = attempt
+                    for group in optimizer.param_groups:
+                        group["lr"] = start_lr
+
+                    _apply_manual_update(optimizer)
+                    with torch.no_grad():
+                        trial_output = model(data)
+                        trial_loss = F.cross_entropy(trial_output, target)
+                        trial_value = float(trial_loss.item())
+                        for buf, saved in zip(model.buffers(), buffer_snapshot):
+                            buf.copy_(saved)
+
+                    if loss_value - trial_value >= step_backtrack_c * start_lr * float(gn_grad_dot):
+                        line_search_accepted_step = True
+                        line_search_accepted += 1
+                        step_size = start_lr
+                        applied_update = True
+                        break
+
+                    line_search_accepted_step = False
+                    for param, saved in zip(params, param_snapshot):
+                        param.data.copy_(saved)
+                    start_lr = max(start_lr * step_backtrack_rho, step_eps)
+
+                if not applied_update:
+                    for group in optimizer.param_groups:
+                        group["lr"] = start_lr
+                    _apply_manual_update(optimizer)
+                    line_search_rejected += 1
+                    line_search_accepted_step = False
+                    step_size = start_lr
+                    applied_update = True
+            apply_elapsed = time.perf_counter() - apply_timer_start
+            gn_apply_time_s += apply_elapsed
+            gn_apply_time_s_step = apply_elapsed
+            if applied_update:
+                gn_apply_count += 1
+        elif step_rule != "none":
             if step_rule == "eoss":
                 s_hat = step_state.get("eoss_curvature_ema")
                 base_lr = step_state.get("eoss_base_lr")
@@ -1456,6 +1998,11 @@ def train_one_epoch(
             step_time_ms = None
             if measure_this:
                 step_time_ms = elapsed * 1000.0
+            gn_update_time_ms = None
+            gn_apply_time_ms = None
+            if direction == "gn-layerwise-exact":
+                gn_update_time_ms = float((gn_update_time_s_step or 0.0) * 1000.0)
+                gn_apply_time_ms = float((gn_apply_time_s_step or 0.0) * 1000.0)
             log_fn(
                 StepLog(
                     epoch=epoch,
@@ -1470,6 +2017,10 @@ def train_one_epoch(
                     step_time_ms=step_time_ms,
                     line_search_iters=line_search_iters,
                     line_search_accepted=line_search_accepted_step,
+                    gn_selected_count=gn_selected_count if direction == "gn-layerwise-exact" else None,
+                    gn_selected_layers=gn_selected_names if direction == "gn-layerwise-exact" else None,
+                    gn_update_time_ms=gn_update_time_ms,
+                    gn_apply_time_ms=gn_apply_time_ms,
                 )
             )
 
@@ -1528,6 +2079,12 @@ def train_one_epoch(
     precond_layer_list = None
     if precond_layer_stats:
         precond_layer_list = [precond_layer_stats[name] for name in sorted(precond_layer_stats)]
+    gn_layer_list = None
+    if gn_layer_stats:
+        if steps_seen > 0:
+            for stats in gn_layer_stats.values():
+                stats["gn_selected_frac"] = float(stats["gn_selected_count"] / steps_seen)
+        gn_layer_list = [gn_layer_stats[name] for name in sorted(gn_layer_stats)]
 
     sparsity_fraction = None
     dense_flops = None
@@ -1609,6 +2166,11 @@ def train_one_epoch(
         precond_update_time_s=float(precond_update_time_s),
         precond_apply_time_s=float(precond_apply_time_s),
         precond_layer_stats=precond_layer_list,
+        gn_update_count=gn_update_count,
+        gn_apply_count=gn_apply_count,
+        gn_update_time_s=float(gn_update_time_s) if direction == "gn-layerwise-exact" else None,
+        gn_apply_time_s=float(gn_apply_time_s) if direction == "gn-layerwise-exact" else None,
+        gn_layer_stats=gn_layer_list,
         anderson_applied=anderson_applied,
         anderson_failed=anderson_failed,
         data_wait_time_s=data_wait_time_s,

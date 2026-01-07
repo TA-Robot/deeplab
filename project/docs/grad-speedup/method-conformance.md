@@ -11,7 +11,7 @@ Table
 | Category | Method | Paper(s) | Status | Scope | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Direction / preconditioning | Full Gauss-Newton (GN) | arXiv:2510.09378 | audited | optional | Large-batch upper bound; heavy compute |
-| Direction / preconditioning | Layerwise GN | arXiv:2510.09378 | audited | optional | Layerwise block approximation |
+| Direction / preconditioning | Layerwise GN | arXiv:2510.09378 | audited | optional | Paper spec is block-diagonal; current code offers proxy diag-Fisher (not paper-accurate) |
 | Direction / preconditioning | Exact Gauss-Newton (EGN) | arXiv:2405.14402 | audited | optional | Low-rank / batch-space update |
 | Direction / preconditioning | Dual NGD | arXiv:2505.21404 | audited | optional | Residual-space solve |
 | Direction / preconditioning | Shampoo | arXiv:1802.09568 | audited | optional | Kronecker preconditioning |
@@ -77,6 +77,19 @@ EoSS (Edge of Stochastic Stability) (arXiv:2412.20553)
   - Estimate directional curvature s_t ≈ g_t^T H_t g_t / ||g_t||^2 using HVP every K steps.
   - Maintain EMA: s_hat_t = α s_hat_{t−1} + (1−α) s_t.
   - Step size rule: η_t = β * 2 / (s_hat_t + ε), with clipping to [η_min, η_max].
+
+Gauss-Newton (full) + Layerwise GN (arXiv:2510.09378)
+- Gauss-Newton matrix definition (Section 4.2, page 4):
+  - G := J^T H_l J (Jacobian of model outputs with respect to parameters and loss Hessian w.r.t. outputs).
+- Gauss-Newton update / preconditioner (Section 4.3, page 5; Algorithm 1 page 3):
+  - Update uses G^{-1} to precondition the gradient; implemented by minimizing the loss over the linearized model.
+- Layerwise Gauss-Newton (Section 6.3, pages 8–9):
+  - Applies per-layer Taylor expansion (block-diagonal / layerwise approximation).
+- Implementation note:
+  - Any “gn-layerwise” module must explicitly tie to this per-layer GN approximation.
+  - Simple diagonal Fisher / EMA(g^2) is a *proxy* and should be labeled as not paper-accurate unless justified.
+  - gn-layerwise-exact supports optional layer subsampling (top/bottom/random-k) for profiling; this is experimental and not paper-accurate.
+  - GN update intervals (reusing cached GN updates between refreshes) are experimental and not paper-accurate.
 
 (L0, L1)-smoothness / (L0,L1)-GD (arXiv:2409.14989; arXiv:2410.10800)
 - Algorithm 1 ((L0,L1)-GD), page 7 (arXiv:2409.14989):

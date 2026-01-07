@@ -1,5 +1,57 @@
 # Experiment Log
 
+- 2026-01-07: 20260107-grad-speedup-gnlite-smoke200 (queued)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: queued (GPU, max_steps=200)
+  - Notes: gn-layerwise-exact with layer subsampling (k=5, cg_iters=1) to check wall-clock overhead.
+  - Run IDs:
+    - 20260107-grad-speedup-gnlite-smoke200-topk5
+    - 20260107-grad-speedup-gnlite-smoke200-bottomk5
+    - 20260107-grad-speedup-gnlite-smoke200-randomk5
+
+- 2026-01-07: 20260107-grad-speedup-gnlite-2000 (queued)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: queued (GPU, max_steps=2000)
+  - Notes: extend GN-lite (top/bottom/random-k) to 2k steps to compare time-to-target.
+  - Run IDs:
+    - 20260107-grad-speedup-gnlite-2000-topk5
+    - 20260107-grad-speedup-gnlite-2000-bottomk5
+    - 20260107-grad-speedup-gnlite-2000-randomk5
+
+- 2026-01-07: 20260107-grad-speedup-gnlite-2000-int5 (queued)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: queued (GPU, max_steps=2000)
+  - Notes: GN-lite with update interval=5 (reuse cached GN direction between refreshes).
+  - Run IDs:
+    - 20260107-grad-speedup-gnlite-2000-topk5-int5
+    - 20260107-grad-speedup-gnlite-2000-bottomk5-int5
+    - 20260107-grad-speedup-gnlite-2000-randomk5-int5
+
+- 2026-01-07: 20260107-grad-speedup-gnlite-2000-int20 (queued)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: queued (GPU, max_steps=2000)
+  - Notes: GN-lite with update interval=20 (reuse cached GN direction between refreshes).
+  - Run IDs:
+    - 20260107-grad-speedup-gnlite-2000-topk5-int20
+    - 20260107-grad-speedup-gnlite-2000-bottomk5-int20
+    - 20260107-grad-speedup-gnlite-2000-randomk5-int20
+
+- 2026-01-07: 20260107-grad-speedup-gnlite-2000-int5-adam (queued)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: queued (GPU, max_steps=2000)
+  - Notes: GN-lite topk5 with update interval=5 using Adam optimizer (lr=1e-3).
+  - Run IDs:
+    - 20260107-grad-speedup-gnlite-2000-topk5-int5-adam
+
+- 2026-01-07: 20260107-grad-speedup-step-ggnc-linbreg-resnet18-maxsteps14000 (queued)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: queued (GPU, max_steps=14000, seeds 0/1/2)
+  - Notes: promote top non-muon configs from tune2000 to 14k for time-to-target comparison.
+  - Run IDs:
+    - 20260107-grad-speedup-step-ggnc-global-rho1.0-resnet18-maxsteps14000-seeds012
+    - 20260107-grad-speedup-step-ggnc-layerwise-rho0.5-resnet18-maxsteps14000-seeds012
+    - 20260107-grad-speedup-step-linbreg-l2e-4-resnet18-maxsteps14000-seeds012
+
 - 2026-01-06: 20260106-grad-speedup-cifar10 (spec-aligned reset)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
   - Status: planning (base grid)
@@ -310,3 +362,59 @@
     - 20251229-zz-cnn-baseline-full
     - 20251229-zzzz-mlp-obl-full
     - 20251229-zzzz-cnn-obl-full
+- 2026-01-06: 20260106-grad-speedup-screen2000-resnet18 (done)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: done (GPU, step-based)
+  - Notes: max_steps=2,000; eval_interval_steps=200; eval_interval_epochs=0; early-stop=max.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-screen2000-baseline-sgd-seed0
+    - 20260106-grad-speedup-screen2000-backtrack-sgd-seed0
+    - 20260106-grad-speedup-screen2000-ggnc-global-sgd-seed0
+    - 20260106-grad-speedup-screen2000-ggnc-layerwise-sgd-seed0
+    - 20260106-grad-speedup-screen2000-anderson-sgd-seed0
+    - 20260106-grad-speedup-screen2000-linbreg-sgd-seed0
+    - 20260106-grad-speedup-screen2000-muon-sgd-seed0
+    - 20260106-grad-speedup-screen2000-muon-adamw-seed0
+    - 20260106-grad-speedup-screen2000-eoss-sgd-seed0
+
+- 2026-01-06: 20260106-grad-speedup-tune2000-resnet18 (running)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: running (GPU queue)
+  - Notes: parameter sweeps for EoSS/Backtracking/GGNC/Anderson/LinBreg/Muon; max_steps=2,000; eval_interval_steps=200.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs (prefix):
+    - 20260106-grad-speedup-tune2000-eoss-*
+    - 20260106-grad-speedup-tune2000-backtrack-*
+    - 20260106-grad-speedup-tune2000-ggnc-*
+    - 20260106-grad-speedup-tune2000-anderson-*
+    - 20260106-grad-speedup-tune2000-linbreg-*
+    - 20260106-grad-speedup-tune2000-muon-*
+
+- 2026-01-06: smoke-gn-layerwise-exact (partial)
+  - Brief: project/docs/grad-speedup/tickets/running/task-20260106-grad-speedup-gn-layerwise-paper-accurate.md
+  - Status: partial (timed out at 200-step smoke)
+  - Notes: `gn-layerwise-exact` slow per-step; only step 0 logged before timeout (120s).
+  - Artifact location: project/runs/grad-speedup/smoke-gn-layerwise-exact
+  - Run IDs:
+    - smoke-gn-layerwise-exact
+
+- 2026-01-06: smoke-gn-layerwise-exact-prof (done)
+  - Brief: project/docs/grad-speedup/tickets/running/task-20260106-grad-speedup-gn-layerwise-paper-accurate.md
+  - Status: done (profiling)
+  - Notes: resnet18, max_steps=1, batch=32, gn_cg_iters=1, diagnostics enabled; used to capture per-layer GN timing.
+  - Artifact location: project/runs/grad-speedup/smoke-gn-layerwise-exact-prof
+  - Run IDs:
+    - smoke-gn-layerwise-exact-prof
+
+- 2026-01-06: 20260106-grad-speedup-combo2000-resnet18 (queued)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: queued (GPU queue)
+  - Notes: combo sweeps with *derived* parameters (GGNC rho from clip_coef_mean, Anderson from best t60 with zero failures, LinBreg lambda from sparsity extrapolation); max_steps=2,000; eval_interval_steps=200.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260106-grad-speedup-combo2000-ggnc-global-rho1.0-anderson-m5-i5-d0.5-sgd-seed0
+    - 20260106-grad-speedup-combo2000-ggnc-global-rho1.0-linbreg-l1.5e-3-sgd-seed0
+    - 20260106-grad-speedup-combo2000-ggnc-global-rho1.0-linbreg-l3e-3-sgd-seed0
+    - 20260106-grad-speedup-combo2000-ggnc-global-rho1.0-anderson-m5-i5-d0.5-linbreg-l1.5e-3-sgd-seed0
+    - 20260106-grad-speedup-combo2000-linbreg-l1.5e-3-anderson-m5-i5-d0.5-sgd-seed0

@@ -73,18 +73,26 @@ TIME_COL_CANDIDATES = [
 
 
 @st.cache_data(show_spinner=True)
-def load_runs(data_root: str, queue_file: Optional[str]) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_runs(
+    data_root: str, queue_file: Optional[str]
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     data_mod = importlib.import_module("dashboard.data")
-    result = data_mod.load_all_runs(data_root, queue_file=queue_file)
+    result = data_mod.load_all_runs(data_root, queue_file=queue_file, return_targets=True)
+    if isinstance(result, tuple) and len(result) >= 4:
+        return result[0], result[1], result[2], result[3]
     if isinstance(result, tuple) and len(result) >= 3:
-        return result[0], result[1], result[2]
+        targets_df = pd.DataFrame()
+        return result[0], result[1], result[2], targets_df
     if isinstance(result, dict):
         runs_df = result.get("runs") or result.get("runs_df")
         epochs_df = result.get("epochs") or result.get("epochs_df")
         steps_df = result.get("steps") or result.get("steps_df")
+        targets_df = result.get("targets") or result.get("targets_df")
         if runs_df is not None and epochs_df is not None and steps_df is not None:
-            return runs_df, epochs_df, steps_df
-    raise ValueError("dashboard.data.load_all_runs must return runs_df, epochs_df, steps_df")
+            if targets_df is None:
+                targets_df = pd.DataFrame()
+            return runs_df, epochs_df, steps_df, targets_df
+    raise ValueError("dashboard.data.load_all_runs must return runs_df, epochs_df, steps_df, targets_df")
 
 
 def resolve_col(df: pd.DataFrame, candidates: Sequence[str]) -> Optional[str]:
@@ -139,6 +147,73 @@ def aggregate_by_run_id(df: pd.DataFrame, run_id_col: str, label_cols: Sequence[
     for col in other_cols:
         agg[col] = first_non_null
     return df.groupby(run_id_col, as_index=False).agg(agg)
+
+
+def normalize_targets_df(targets_df: pd.DataFrame) -> pd.DataFrame:
+    if targets_df is None or targets_df.empty:
+        return pd.DataFrame()
+    df = targets_df.copy()
+    if "target" in df.columns:
+        df["target"] = pd.to_numeric(df["target"], errors="coerce")
+    return df
+
+
+def merge_target_metrics(
+    runs_df: pd.DataFrame,
+    targets_df: pd.DataFrame,
+    run_id_col: str,
+    seed_col: Optional[str],
+    target_value: Optional[float],
+) -> pd.DataFrame:
+    if runs_df is None or runs_df.empty:
+        return runs_df
+    if targets_df is None or targets_df.empty:
+        return runs_df
+    if run_id_col not in runs_df.columns or run_id_col not in targets_df.columns:
+        return runs_df
+
+    target_df = normalize_targets_df(targets_df)
+    if target_value is not None and "target" in target_df.columns:
+        target_df = target_df[target_df["target"].notna()]
+        target_df = target_df[target_df["target"] == float(target_value)]
+
+    key_cols = [run_id_col]
+    if seed_col and seed_col in runs_df.columns and seed_col in target_df.columns:
+        key_cols.append(seed_col)
+
+    metric_cols = [
+        "target",
+        "steps_to_target",
+        "time_to_target_sec",
+        "cost_to_target_sec",
+        "time_to_target",
+        "cost_to_target",
+        "target_accuracy",
+        "target_epoch",
+    ]
+    metric_cols = [col for col in metric_cols if col in target_df.columns]
+    if not metric_cols:
+        return runs_df
+
+    target_df = target_df[key_cols + metric_cols].copy()
+    if target_df.duplicated(key_cols).any():
+        target_df = target_df.groupby(key_cols, as_index=False).mean(numeric_only=True)
+
+    runs_clean = runs_df.drop(columns=[col for col in metric_cols if col in runs_df.columns], errors="ignore")
+    return runs_clean.merge(target_df, on=key_cols, how="left")
+
+
+def choose_default_target(targets_df: pd.DataFrame) -> Optional[float]:
+    if targets_df is None or targets_df.empty or "target" not in targets_df.columns:
+        return None
+    df = normalize_targets_df(targets_df)
+    if df.empty:
+        return None
+    if "time_to_target_sec" in df.columns:
+        counts = df.groupby("target")["time_to_target_sec"].apply(lambda s: s.notna().sum())
+        if not counts.empty and counts.max() > 0:
+            return float(counts.idxmax())
+    return float(df["target"].dropna().max())
 
 
 def reduce_status(values: pd.Series) -> Optional[str]:
@@ -518,7 +593,7 @@ def main() -> None:
         st.subheader("Filters")
 
     try:
-        runs_df, epochs_df, steps_df = load_runs(data_root, queue_file)
+        runs_df, epochs_df, steps_df, targets_df = load_runs(data_root, queue_file)
     except ModuleNotFoundError as exc:
         st.error("Missing dashboard.data module. Ensure the data layer is installed.")
         st.exception(exc)
@@ -537,6 +612,25 @@ def main() -> None:
         st.error("runs_df must include a run_id column.")
         st.stop()
 
+    seed_col = resolve_col(runs_df, SEED_CANDIDATES)
+
+    targets_df = normalize_targets_df(targets_df)
+    target_value = None
+    if not targets_df.empty and "target" in targets_df.columns:
+        target_values = sorted([v for v in targets_df["target"].dropna().unique()])
+        if target_values:
+            default_target = choose_default_target(targets_df)
+            default_index = target_values.index(default_target) if default_target in target_values else 0
+            with st.sidebar:
+                st.subheader("Targets")
+                target_value = st.selectbox(
+                    "Target accuracy",
+                    target_values,
+                    index=default_index,
+                    format_func=lambda v: f"{float(v):.2f}",
+                )
+
+    runs_df = merge_target_metrics(runs_df, targets_df, run_id_col, seed_col, target_value)
     filters_df = runs_df.copy()
 
     model_col = resolve_col(filters_df, ["model", "arch"])
@@ -558,6 +652,11 @@ def main() -> None:
         filters_df, _ = build_multiselect(filters_df, "Anderson", anderson_col)
 
     selected_run_ids = filters_df[run_id_col].astype(str).unique().tolist()
+
+    if target_value is not None:
+        time_col = resolve_col(filters_df, ["time_to_target", "time_to_target_sec"])
+        if time_col is None or coerce_numeric(filters_df[time_col]).dropna().empty:
+            st.warning("Selected target has no time-to-target data yet. Check eval settings or target accuracy.")
 
     run_seed_col = resolve_col(filters_df, SEED_CANDIDATES)
     label_cols = filter_existing_columns(
@@ -665,9 +764,11 @@ def main() -> None:
             direction_col,
             clip_col,
             sparsity_col,
-            pick_metric(filters_df, ["mean_step_time_ms", "mean_step_time_sec", "step_time_ms_mean", "step_time_ms"]),
+            "target" if "target" in filters_df.columns else None,
+            pick_metric(filters_df, ["time_to_target", "time_to_target_sec"]),
+            pick_metric(filters_df, ["steps_to_target"]),
+            pick_metric(filters_df, ["cost_to_target", "cost_to_target_sec"]),
             pick_metric(filters_df, ["throughput", "steps_per_sec"]),
-            pick_metric(filters_df, ["time_to_target", "cost_to_target", "steps_to_target"]),
             pick_metric(filters_df, ["final_test_acc", "best_test_acc", "test_acc", "val_acc", "accuracy"]),
         ]
         overview_cols = [col for col in overview_cols if col]
@@ -683,7 +784,7 @@ def main() -> None:
         st.subheader("Speed vs Quality")
         speed_metric = pick_metric(
             color_plot_df,
-            ["cost_to_target", "time_to_target", "mean_step_time_ms", "mean_step_time_sec", "step_time_ms_mean"],
+            ["time_to_target", "time_to_target_sec", "cost_to_target", "cost_to_target_sec"],
         )
         quality_metric = pick_metric(
             color_plot_df, ["final_test_acc", "best_test_acc", "test_acc", "val_acc", "accuracy"]
@@ -714,7 +815,7 @@ def main() -> None:
         st.subheader("Speed Summary")
         speed_bar_metric = pick_metric(
             color_plot_df,
-            ["mean_step_time_ms", "mean_step_time_sec", "step_time_ms_mean", "time_to_target", "cost_to_target"],
+            ["time_to_target", "time_to_target_sec", "cost_to_target", "cost_to_target_sec"],
         )
         bar_selection = plot_bar(
             color_plot_df,
@@ -913,7 +1014,7 @@ def main() -> None:
         compare_summary_cols = [
             run_id_col,
             pick_metric(
-                filters_df, ["mean_step_time_ms", "mean_step_time_sec", "step_time_ms_mean", "time_to_target", "cost_to_target"]
+                filters_df, ["time_to_target", "time_to_target_sec", "cost_to_target", "cost_to_target_sec"]
             ),
             pick_metric(filters_df, ["final_test_acc", "best_test_acc", "test_acc", "val_acc", "accuracy"]),
             pick_metric(filters_df, ["line_search_accept_rate", "line_search_acceptance_rate"]),

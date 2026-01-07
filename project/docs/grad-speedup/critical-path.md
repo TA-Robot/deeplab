@@ -28,8 +28,8 @@ Lane D: Grid infrastructure
 - Config generator, queue runner, and aggregation scripts.
 
 Lane E: Direction track (separate)
-- Layerwise GN implementation and SOAP fast-check harness.
-- Reported separately; no coupling to base grid unless stable.
+- Layerwise GN proxy + paper-accurate GN prototype (gn-layerwise-exact) retained as reference only.
+- Excluded from active experiments due to compute overhead; no coupling to base grid.
 
 Lane F: Reporting + dashboard
 - Dashboard must show time-to-target and learning curves without legend overlap.
@@ -39,7 +39,7 @@ Gates
 - Direction/preconditioning methods are excluded from the base grid until validated.
 
 Status snapshot (2026-01-06)
-- Spec alignment: in progress (plan/system/combination docs updated).
-- Base-grid methods: EoSS implementation pending; Backtracking/GGNC/Anderson/LinBreg exist but need spec validation.
-- Grid infra: generator + queue runner pending update to 72-condition grid.
-- Direction track: Layerwise GN ticket created; SOAP heavy runs deprecated.
+- Spec alignment: done (plan/system/combination docs updated).
+- Base-grid methods: EoSS implemented; tune2000 sweep running. Backtracking/GGNC/Anderson/LinBreg validated via screen2000.
+- Grid infra: queue runner active; 72-condition grid generator still pending.
+- Direction track: Layerwise GN paperpack + reference implementation done; parked after compute-cost review.

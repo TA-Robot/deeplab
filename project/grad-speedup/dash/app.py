@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime
+import math
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
 import pandas as pd
 import plotly.express as px
 from dash import Dash, Input, Output, State, callback, dcc, html, dash_table
+import dash
 
 DASH_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = DASH_DIR.parent
@@ -50,6 +52,7 @@ DATA_CACHE = {
     "runs": pd.DataFrame(),
     "epochs": pd.DataFrame(),
     "steps": pd.DataFrame(),
+    "targets": pd.DataFrame(),
     "loaded_at": None,
     "runs_dir": None,
 }
@@ -77,6 +80,56 @@ def truncate_label(value: str, max_len: Optional[int]) -> str:
     if max_len <= 3:
         return value[:max_len]
     return value[: max_len - 3] + "..."
+
+
+def metric_label(metric: str) -> str:
+    labels = {
+        "time_to_target_sec": "Time to target (s)",
+        "time_to_target": "Time to target (s)",
+        "cost_to_target_sec": "Cost to target (s)",
+        "cost_to_target": "Cost to target (s)",
+        "steps_to_target": "Steps to target",
+        "accuracy": "Accuracy",
+        "test_acc": "Test accuracy",
+        "val_acc": "Validation accuracy",
+        "final_test_acc": "Final test accuracy",
+        "best_test_acc": "Best test accuracy",
+    }
+    if metric in labels:
+        return labels[metric]
+    return metric.replace("_", " ").title()
+
+
+def format_seconds(value: Optional[float]) -> str:
+    if value is None or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        return "—"
+    value = float(value)
+    if value >= 3600:
+        return f"{value / 3600:.2f}h"
+    if value >= 60:
+        return f"{value / 60:.2f}m"
+    return f"{value:.2f}s"
+
+
+def format_accuracy(value: Optional[float]) -> str:
+    if value is None or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        return "—"
+    value = float(value)
+    if value > 1.5:
+        return f"{value:.2f}"
+    return f"{value * 100:.2f}%"
+
+
+def summarize_run(row: pd.Series) -> str:
+    pieces = []
+    for col in ["model", "optimizer", "step_rule", "direction", "clip_mode", "sparsity"]:
+        if col not in row:
+            continue
+        val = str(row[col])
+        if not val or val == "none" or val == "None":
+            continue
+        pieces.append(f"{col}:{val}")
+    return " | ".join(pieces)
 
 
 def build_unique_label_map(values: Sequence[str], max_len: Optional[int]) -> dict[str, str]:
@@ -178,21 +231,95 @@ def filter_by_run_ids(df: pd.DataFrame, run_ids: Iterable[str]) -> pd.DataFrame:
 
 
 def load_data(runs_dir: str, queue_file: Optional[str]) -> str:
-    runs_df, epochs_df, steps_df = data_mod.load_all_runs(runs_dir, queue_file=queue_file)
+    runs_df, epochs_df, steps_df, targets_df = data_mod.load_all_runs(
+        runs_dir, queue_file=queue_file, return_targets=True
+    )
     DATA_CACHE["runs"] = runs_df
     DATA_CACHE["epochs"] = epochs_df
     DATA_CACHE["steps"] = steps_df
+    DATA_CACHE["targets"] = targets_df
     DATA_CACHE["loaded_at"] = datetime.utcnow().isoformat() + "Z"
     DATA_CACHE["runs_dir"] = runs_dir
-    return f"Loaded {len(runs_df)} run rows | {len(epochs_df)} epochs | {len(steps_df)} steps"
+    return (
+        f"Loaded {len(runs_df)} run rows | {len(epochs_df)} epochs | "
+        f"{len(steps_df)} steps | {len(targets_df)} targets"
+    )
 
 
-def get_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def get_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return (
         DATA_CACHE.get("runs", pd.DataFrame()),
         DATA_CACHE.get("epochs", pd.DataFrame()),
         DATA_CACHE.get("steps", pd.DataFrame()),
+        DATA_CACHE.get("targets", pd.DataFrame()),
     )
+
+
+def normalize_targets_df(targets_df: pd.DataFrame) -> pd.DataFrame:
+    if targets_df is None or targets_df.empty:
+        return pd.DataFrame()
+    df = targets_df.copy()
+    if "target" in df.columns:
+        df["target"] = pd.to_numeric(df["target"], errors="coerce")
+    return df
+
+
+def merge_target_metrics(
+    runs_df: pd.DataFrame,
+    targets_df: pd.DataFrame,
+    run_id_col: Optional[str],
+    seed_col: Optional[str],
+    target_value: Optional[float],
+) -> pd.DataFrame:
+    if runs_df is None or runs_df.empty:
+        return runs_df
+    if targets_df is None or targets_df.empty:
+        return runs_df
+    if run_id_col is None or run_id_col not in runs_df.columns or run_id_col not in targets_df.columns:
+        return runs_df
+
+    target_df = normalize_targets_df(targets_df)
+    if target_value is not None and "target" in target_df.columns:
+        target_df = target_df[target_df["target"].notna()]
+        target_df = target_df[target_df["target"] == float(target_value)]
+
+    key_cols = [run_id_col]
+    if seed_col and seed_col in runs_df.columns and seed_col in target_df.columns:
+        key_cols.append(seed_col)
+
+    metric_cols = [
+        "target",
+        "steps_to_target",
+        "time_to_target_sec",
+        "cost_to_target_sec",
+        "time_to_target",
+        "cost_to_target",
+        "target_accuracy",
+        "target_epoch",
+    ]
+    metric_cols = [col for col in metric_cols if col in target_df.columns]
+    if not metric_cols:
+        return runs_df
+
+    target_df = target_df[key_cols + metric_cols].copy()
+    if target_df.duplicated(key_cols).any():
+        target_df = target_df.groupby(key_cols, as_index=False).mean(numeric_only=True)
+
+    runs_clean = runs_df.drop(columns=[col for col in metric_cols if col in runs_df.columns], errors="ignore")
+    return runs_clean.merge(target_df, on=key_cols, how="left")
+
+
+def choose_default_target(targets_df: pd.DataFrame) -> Optional[float]:
+    if targets_df is None or targets_df.empty or "target" not in targets_df.columns:
+        return None
+    df = normalize_targets_df(targets_df)
+    if df.empty:
+        return None
+    if "time_to_target_sec" in df.columns:
+        counts = df.groupby("target")["time_to_target_sec"].apply(lambda s: s.notna().sum())
+        if not counts.empty and counts.max() > 0:
+            return float(counts.idxmax())
+    return float(df["target"].dropna().max())
 
 
 def apply_run_filters(
@@ -250,6 +377,8 @@ app.layout = html.Div(
                 dcc.Dropdown(id="filter-direction", multi=True),
                 html.Label("Seed"),
                 dcc.Dropdown(id="filter-seed", multi=True),
+                html.Label("Target accuracy"),
+                dcc.Dropdown(id="target-acc"),
                 html.Hr(),
                 html.H3("Plot Controls"),
                 html.Label("Color by"),
@@ -292,7 +421,19 @@ app.layout = html.Div(
                     id="tabs",
                     value="overview",
                     children=[
-                        dcc.Tab(label="Overview", value="overview", children=[html.Div(id="overview-content")]),
+                        dcc.Tab(
+                            label="Overview",
+                            value="overview",
+                            children=[
+                                html.Div(
+                                    id="overview-content",
+                                    children=[
+                                        dcc.Graph(id="speed-scatter"),
+                                        dash_table.DataTable(id="overview-leaderboard"),
+                                    ],
+                                )
+                            ],
+                        ),
                         dcc.Tab(
                             label="Compare",
                             value="compare",
@@ -350,12 +491,14 @@ def reload_data(n_clicks: int, runs_dir: str, queue_file: str):
     Output("filter-direction", "value"),
     Output("filter-seed", "options"),
     Output("filter-seed", "value"),
+    Output("target-acc", "options"),
+    Output("target-acc", "value"),
     Output("color-by", "options"),
     Output("color-by", "value"),
     Input("data-version", "data"),
 )
 def update_filter_options(_version: int):
-    runs_df, _, _ = get_data()
+    runs_df, _, _, targets_df = get_data()
     def options_for(col: str):
         if col not in runs_df.columns:
             return [], []
@@ -370,6 +513,16 @@ def update_filter_options(_version: int):
 
     seed_col = resolve_col(runs_df, SEED_CANDIDATES) or "seed"
     seed_opts, seed_vals = options_for(seed_col) if seed_col in runs_df.columns else ([], [])
+
+    target_opts = []
+    target_vals: list[float] = []
+    targets_df = normalize_targets_df(targets_df)
+    if not targets_df.empty and "target" in targets_df.columns:
+        target_vals = sorted([v for v in targets_df["target"].dropna().unique()])
+        target_opts = [{"label": f"{float(v):.2f}", "value": float(v)} for v in target_vals]
+    target_default = choose_default_target(targets_df)
+    if target_default not in target_vals:
+        target_default = target_vals[0] if target_vals else None
 
     color_opts = []
     for col in COLOR_CANDIDATES:
@@ -388,6 +541,8 @@ def update_filter_options(_version: int):
         dir_vals,
         seed_opts,
         seed_vals,
+        target_opts,
+        target_default,
         color_opts,
         color_value,
     )
@@ -403,7 +558,7 @@ def update_filter_options(_version: int):
     Input("filter-seed", "value"),
 )
 def update_summary(_version, models, optimizers, step_rules, directions, seeds):
-    runs_df, epochs_df, steps_df = get_data()
+    runs_df, epochs_df, steps_df, _ = get_data()
     filtered = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
     run_count = len(filtered)
     run_id_col = resolve_col(filtered, RUN_ID_CANDIDATES)
@@ -431,20 +586,76 @@ def build_overview_tab(
     max_len: int,
     show_legend_table: bool,
     disable_hover: bool,
+    target_value: Optional[float],
 ) -> list:
     if runs_df.empty:
         return [html.Div("No runs available for the current filters.")]
     run_id_col = resolve_col(runs_df, RUN_ID_CANDIDATES)
     speed_metric = pick_metric(
         runs_df,
-        ["mean_step_time_ms", "mean_step_time_sec", "step_time_ms_mean", "time_to_target", "cost_to_target"],
+        ["time_to_target", "time_to_target_sec", "cost_to_target", "cost_to_target_sec"],
     )
     quality_metric = pick_metric(runs_df, ["final_test_acc", "best_test_acc", "test_acc", "val_acc", "accuracy"])
     if speed_metric is None or quality_metric is None or run_id_col is None:
         return [html.Div("Required metrics are missing for overview plots.")]
 
     plot_df, color_col = prepare_color_column(runs_df, color_by, truncate, max_len)
-    hover_cols = [col for col in ["model", "optimizer", "step_rule", "direction", "seed"] if col in plot_df.columns]
+    plot_df = plot_df.copy()
+    plot_df[speed_metric] = pd.to_numeric(plot_df[speed_metric], errors="coerce")
+    plot_df[quality_metric] = pd.to_numeric(plot_df[quality_metric], errors="coerce")
+
+    run_labels = build_unique_label_map(
+        plot_df[run_id_col].astype(str).dropna().unique().tolist(),
+        28,
+    )
+    plot_df["run_label"] = plot_df[run_id_col].astype(str).map(run_labels)
+
+    speed_vals = plot_df[speed_metric].dropna()
+    quality_vals = plot_df[quality_metric].dropna()
+    best_speed = float(speed_vals.min()) if not speed_vals.empty else None
+    best_speed_row = plot_df.loc[speed_vals.idxmin()] if not speed_vals.empty else None
+    median_speed = float(speed_vals.median()) if not speed_vals.empty else None
+    p90_speed = float(speed_vals.quantile(0.9)) if len(speed_vals) >= 3 else None
+    best_quality = float(quality_vals.max()) if not quality_vals.empty else None
+    best_quality_row = plot_df.loc[quality_vals.idxmax()] if not quality_vals.empty else None
+
+    run_count = len(plot_df)
+    coverage_pct = (len(speed_vals) / run_count * 100.0) if run_count else 0.0
+
+    target_display = f"{target_value:.2f}" if target_value is not None else "auto"
+    speed_label = metric_label(speed_metric)
+    quality_label = metric_label(quality_metric)
+
+    best_speed_name = best_speed_row["run_label"] if best_speed_row is not None else None
+    best_speed_detail = summarize_run(best_speed_row) if best_speed_row is not None else ""
+    best_quality_name = best_quality_row["run_label"] if best_quality_row is not None else None
+    best_quality_detail = summarize_run(best_quality_row) if best_quality_row is not None else ""
+
+    highlight_idx = speed_vals.nsmallest(5).index if not speed_vals.empty else []
+    plot_df["highlight"] = None
+    if len(highlight_idx) > 0:
+        plot_df.loc[highlight_idx, "highlight"] = plot_df.loc[highlight_idx, "run_label"]
+
+    hover_cols = [
+        col
+        for col in [
+            "model",
+            "optimizer",
+            "step_rule",
+            "direction",
+            "clip_mode",
+            "sparsity",
+            "seed",
+            "target",
+            "status",
+            "progress_pct",
+        ]
+        if col in plot_df.columns
+    ]
+
+    legend_mode = legend_position
+    if color_col and plot_df[color_col].nunique() > 12:
+        legend_mode = "hide"
 
     scatter_fig = px.scatter(
         plot_df,
@@ -454,53 +665,159 @@ def build_overview_tab(
         hover_name=run_id_col,
         hover_data=hover_cols,
         custom_data=[run_id_col] if run_id_col else None,
-        title="Speed vs quality",
+        text="highlight",
+        title=f"Tradeoff: {speed_label} vs {quality_label}",
     )
-    apply_legend(scatter_fig, legend_position, max_len if truncate else None)
+    scatter_fig.update_traces(
+        textposition="top center",
+        marker=dict(size=10, opacity=0.85, line=dict(width=1, color="#20323c")),
+    )
+    apply_legend(scatter_fig, legend_mode, max_len if truncate else None)
     apply_hover(scatter_fig, disable_hover)
 
+    leader_df = plot_df[plot_df[speed_metric].notna()].sort_values(speed_metric).head(12)
+    leader_df = leader_df.copy()
+    leader_df["detail"] = leader_df.apply(summarize_run, axis=1)
+
     bar_fig = px.bar(
-        plot_df,
-        x=run_id_col,
-        y=speed_metric,
-        color=color_col if color_col != run_id_col else None,
-        title="Speed metric by run",
+        leader_df,
+        x=speed_metric,
+        y="run_label",
+        color=color_col if color_col and color_col in leader_df.columns and color_col != run_id_col else None,
+        orientation="h",
+        title=f"Fastest runs (top {len(leader_df)})",
     )
-    apply_legend(bar_fig, legend_position, max_len if truncate else None)
+    bar_fig.update_layout(yaxis={"categoryorder": "total ascending"})
+    apply_legend(bar_fig, legend_mode, max_len if truncate else None)
     apply_hover(bar_fig, disable_hover)
 
-    table_cols = [
-        col
-        for col in [
-            run_id_col,
-            "model",
-            "optimizer",
-            "step_rule",
-            "direction",
-            "seed",
-            speed_metric,
-            quality_metric,
-            "status",
-            "progress_pct",
-        ]
-        if col and col in runs_df.columns
+    group_col = None
+    for candidate in [color_by, "direction", "step_rule", "clip_mode", "sparsity", "optimizer", "model"]:
+        if candidate and candidate in plot_df.columns:
+            group_col = candidate
+            break
+    group_fig = None
+    if group_col and plot_df[speed_metric].notna().any():
+        grouped = plot_df.dropna(subset=[speed_metric]).groupby(group_col)[speed_metric].median()
+        grouped = grouped.sort_values().head(12)
+        group_df = grouped.reset_index().rename(columns={speed_metric: speed_metric, group_col: "group"})
+        group_fig = px.bar(
+            group_df,
+            x=speed_metric,
+            y="group",
+            orientation="h",
+            title=f"Median {speed_label} by {group_col}",
+        )
+        group_fig.update_layout(yaxis={"categoryorder": "total ascending"})
+        apply_legend(group_fig, "hide", None)
+        apply_hover(group_fig, disable_hover)
+
+    status_strip = []
+    if "status" in plot_df.columns:
+        status_counts = plot_df["status"].fillna("unknown").value_counts().to_dict()
+        for status, count in status_counts.items():
+            status_strip.append(
+                html.Div(
+                    [html.Span(str(status).title()), html.Span(str(count), className="chip-count")],
+                    className="status-chip",
+                    **{"data-status": str(status).lower()},
+                )
+            )
+
+    kpi_cards = [
+        html.Div(
+            className="kpi-card",
+            children=[
+                html.Div("Target / coverage", className="kpi-label"),
+                html.Div(target_display, className="kpi-value"),
+                html.Div(f"Coverage {coverage_pct:.0f}% ({len(speed_vals)}/{run_count})", className="kpi-sub"),
+            ],
+        ),
+        html.Div(
+            className="kpi-card",
+            children=[
+                html.Div("Fastest time-to-target", className="kpi-label"),
+                html.Div(format_seconds(best_speed), className="kpi-value"),
+                html.Div(best_speed_name or "—", className="kpi-sub"),
+                html.Div(best_speed_detail or "", className="kpi-sub"),
+            ],
+        ),
+        html.Div(
+            className="kpi-card",
+            children=[
+                html.Div("Median / P90 time-to-target", className="kpi-label"),
+                html.Div(format_seconds(median_speed), className="kpi-value"),
+                html.Div(f"P90 {format_seconds(p90_speed)}", className="kpi-sub"),
+            ],
+        ),
+        html.Div(
+            className="kpi-card",
+            children=[
+                html.Div("Best quality", className="kpi-label"),
+                html.Div(format_accuracy(best_quality), className="kpi-value"),
+                html.Div(best_quality_name or "—", className="kpi-sub"),
+                html.Div(best_quality_detail or "", className="kpi-sub"),
+            ],
+        ),
     ]
 
-    table = dash_table.DataTable(
-        data=runs_df[table_cols].to_dict("records"),
-        columns=[{"name": col, "id": col} for col in table_cols],
+    leaderboard_cols = [
+        run_id_col,
+        "run_label",
+        speed_metric,
+        quality_metric,
+        "model",
+        "optimizer",
+        "step_rule",
+        "direction",
+        "seed",
+        "target",
+        "status",
+        "progress_pct",
+        "detail",
+    ]
+    leaderboard_cols = [col for col in leaderboard_cols if col in leader_df.columns]
+    leaderboard_table = dash_table.DataTable(
+        id="overview-leaderboard",
+        data=leader_df[leaderboard_cols].to_dict("records"),
+        columns=[{"name": "run", "id": "run_label"}]
+        + [{"name": col, "id": col} for col in leaderboard_cols if col not in ("run_label", run_id_col)],
+        hidden_columns=[run_id_col] if run_id_col in leaderboard_cols else [],
         page_size=12,
+        row_selectable="single",
         sort_action="native",
         filter_action="native",
         style_table={"overflowX": "auto"},
+        style_cell={"fontFamily": "IBM Plex Mono, monospace", "fontSize": "0.78rem"},
     )
 
     content = [
         html.Div(
-            className="grid-2",
+            className="overview-header",
+            children=[
+                html.Div("Overview", className="section-title"),
+                html.Div(status_strip, className="status-strip") if status_strip else html.Div(),
+            ],
+        ),
+        html.Div(className="kpi-grid", children=kpi_cards),
+        html.Div(
+            className="overview-grid",
             children=[
                 dcc.Graph(id="speed-scatter", figure=scatter_fig),
+                html.Div(
+                    className="overview-card",
+                    children=[
+                        html.Div("Leaderboard (fastest)", className="section-title"),
+                        leaderboard_table,
+                    ],
+                ),
+            ],
+        ),
+        html.Div(
+            className="grid-2",
+            children=[
                 dcc.Graph(id="speed-bar", figure=bar_fig),
+                dcc.Graph(figure=group_fig) if group_fig is not None else html.Div(),
             ],
         ),
     ]
@@ -515,7 +832,7 @@ def build_overview_tab(
             legend_columns.append({"name": "full", "id": "full"})
         content.extend(
             [
-                html.H3("Legend (full labels)"),
+                html.Div("Legend (full labels)", className="section-title"),
                 dash_table.DataTable(
                     data=legend_df.to_dict("records"),
                     columns=legend_columns,
@@ -525,13 +842,6 @@ def build_overview_tab(
                 ),
             ]
         )
-
-    content.extend(
-        [
-            html.H3("Run Table"),
-            table,
-        ]
-    )
     return content
 
 
@@ -808,9 +1118,26 @@ def build_diagnostics_tab(
     Input("filter-step-rule", "value"),
     Input("filter-direction", "value"),
     Input("filter-seed", "value"),
+    Input("speed-scatter", "clickData"),
+    Input("overview-leaderboard", "selected_rows"),
+    State("overview-leaderboard", "data"),
+    State("compare-runs", "value"),
+    State("detail-run", "value"),
 )
-def update_run_dropdowns(_version, models, optimizers, step_rules, directions, seeds):
-    runs_df, _, _ = get_data()
+def update_run_dropdowns(
+    _version,
+    models,
+    optimizers,
+    step_rules,
+    directions,
+    seeds,
+    scatter_click,
+    leaderboard_rows,
+    leaderboard_data,
+    current_compare,
+    current_detail,
+):
+    runs_df, _, _, _ = get_data()
     filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
     run_id_col = resolve_col(filtered_runs, RUN_ID_CANDIDATES)
     run_ids = (
@@ -821,7 +1148,37 @@ def update_run_dropdowns(_version, models, optimizers, step_rules, directions, s
     options = [{"label": rid, "value": rid} for rid in run_ids]
     default_compare = run_ids[:3] if len(run_ids) > 3 else run_ids
     default_detail = run_ids[0] if run_ids else None
-    return options, default_compare, options, default_detail
+
+    def clamp_compare(values):
+        if not values:
+            return default_compare
+        filtered = [v for v in values if v in run_ids]
+        return filtered or default_compare
+
+    def clamp_detail(value):
+        if value in run_ids:
+            return value
+        return default_detail
+
+    selected_run = None
+    if scatter_click and isinstance(scatter_click, dict):
+        points = scatter_click.get("points") or []
+        if points:
+            custom = points[0].get("customdata") or []
+            if custom:
+                selected_run = custom[0]
+    if selected_run is None and leaderboard_rows and leaderboard_data:
+        row_idx = leaderboard_rows[0] if leaderboard_rows else None
+        if row_idx is not None and 0 <= row_idx < len(leaderboard_data):
+            row = leaderboard_data[row_idx]
+            selected_run = row.get(run_id_col) or row.get("run_id")
+
+    ctx = dash.callback_context
+    trigger = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
+    if trigger in ("speed-scatter", "overview-leaderboard") and selected_run in run_ids:
+        return options, clamp_compare(current_compare), options, selected_run
+
+    return options, clamp_compare(current_compare), options, clamp_detail(current_detail)
 
 
 @callback(
@@ -832,6 +1189,7 @@ def update_run_dropdowns(_version, models, optimizers, step_rules, directions, s
     Input("filter-step-rule", "value"),
     Input("filter-direction", "value"),
     Input("filter-seed", "value"),
+    Input("target-acc", "value"),
     Input("color-by", "value"),
     Input("legend-position", "value"),
     Input("truncate-legend", "value"),
@@ -846,6 +1204,7 @@ def update_overview(
     step_rules,
     directions,
     seeds,
+    target_value,
     color_by,
     legend_position,
     truncate_vals,
@@ -853,7 +1212,10 @@ def update_overview(
     legend_table_vals,
     disable_hover_vals,
 ):
-    runs_df, epochs_df, steps_df = get_data()
+    runs_df, epochs_df, steps_df, targets_df = get_data()
+    run_id_col = resolve_col(runs_df, RUN_ID_CANDIDATES)
+    seed_col = resolve_col(runs_df, SEED_CANDIDATES)
+    runs_df = merge_target_metrics(runs_df, targets_df, run_id_col, seed_col, target_value)
     filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
     run_id_col = resolve_col(filtered_runs, RUN_ID_CANDIDATES)
     run_ids = (
@@ -877,6 +1239,7 @@ def update_overview(
         max_len,
         show_legend_table,
         disable_hover,
+        target_value,
     )
 
 
@@ -907,7 +1270,7 @@ def update_diagnostics(
     max_len,
     disable_hover_vals,
 ):
-    runs_df, epochs_df, steps_df = get_data()
+    runs_df, epochs_df, steps_df, _ = get_data()
     filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
     run_id_col = resolve_col(filtered_runs, RUN_ID_CANDIDATES)
     run_ids = (
@@ -965,7 +1328,7 @@ def update_compare(
     legend_table_vals,
     disable_hover_vals,
 ):
-    runs_df, epochs_df, steps_df = get_data()
+    runs_df, epochs_df, steps_df, _ = get_data()
     filtered_runs = apply_run_filters(runs_df, models, optimizers, step_rules, directions, seeds)
     run_id_col = resolve_col(filtered_runs, RUN_ID_CANDIDATES)
     filtered_ids = (
@@ -1003,7 +1366,7 @@ def update_compare(
     State("disable-hover", "value"),
 )
 def update_detail(detail_run, _version, legend_position, truncate_vals, max_len, disable_hover_vals):
-    runs_df, epochs_df, steps_df = get_data()
+    runs_df, epochs_df, steps_df, _ = get_data()
     truncate = "on" in (truncate_vals or [])
     disable_hover = "on" in (disable_hover_vals or [])
     return build_detail_tab(

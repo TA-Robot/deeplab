@@ -28,6 +28,7 @@ from src.train import EvalMetrics, StepLog, TrainMetrics, evaluate, set_seed, tr
 MODEL_CHOICES = ("resnet18", "small-cnn")
 OPT_CHOICES = ("sgd", "adam")
 MUON_SCALE_CHOICES = ("none", "baseline", "update-norm", "adjusted-lr")
+GN_LAYER_CHOICES = ("all", "topk", "bottomk", "randomk")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -84,7 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--step-sagd-delta", type=float, default=1e-2)
     parser.add_argument(
         "--direction",
-        choices=("none", "diag-precond", "shampoo", "soap", "sophia", "muon"),
+        choices=("none", "diag-precond", "gn-layerwise", "gn-layerwise-exact", "shampoo", "soap", "sophia", "muon"),
         default="none",
     )
     parser.add_argument("--direction-beta", type=float, default=0.9)
@@ -92,6 +93,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--direction-eps", type=float, default=1e-8)
     parser.add_argument("--direction-damping", type=float, default=1e-5)
     parser.add_argument("--direction-update-every", type=int, default=1)
+    parser.add_argument("--direction-max-size", type=int, default=0)
+    parser.add_argument("--gn-cg-iters", type=int, default=10)
+    parser.add_argument("--gn-cg-tol", type=float, default=1e-4)
+    parser.add_argument("--gn-layer-mode", choices=GN_LAYER_CHOICES, default="all")
+    parser.add_argument("--gn-layer-k", type=int, default=0)
+    parser.add_argument("--gn-update-interval", type=int, default=1)
+    parser.add_argument(
+        "--gn-layer-random-every-step",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Reselect GN layers every step for randomk mode.",
+    )
     parser.add_argument("--sophia-beta1", type=float, default=0.96)
     parser.add_argument("--sophia-beta2", type=float, default=0.99)
     parser.add_argument("--sophia-gamma", "--sophia-rho", dest="sophia_gamma", type=float, default=0.01)
@@ -279,6 +292,20 @@ def apply_config(args: argparse.Namespace, defaults: Dict[str, Any], config: Dic
             _set_if_default(args, defaults, "direction_damping", direction["damping"])
         if "update_every" in direction:
             _set_if_default(args, defaults, "direction_update_every", direction["update_every"])
+        if "max_size" in direction:
+            _set_if_default(args, defaults, "direction_max_size", direction["max_size"])
+        if "gn_cg_iters" in direction:
+            _set_if_default(args, defaults, "gn_cg_iters", direction["gn_cg_iters"])
+        if "gn_cg_tol" in direction:
+            _set_if_default(args, defaults, "gn_cg_tol", direction["gn_cg_tol"])
+        if "gn_layer_mode" in direction:
+            _set_if_default(args, defaults, "gn_layer_mode", direction["gn_layer_mode"])
+        if "gn_layer_k" in direction:
+            _set_if_default(args, defaults, "gn_layer_k", direction["gn_layer_k"])
+        if "gn_update_interval" in direction:
+            _set_if_default(args, defaults, "gn_update_interval", direction["gn_update_interval"])
+        if "gn_layer_random_every_step" in direction:
+            _set_if_default(args, defaults, "gn_layer_random_every_step", direction["gn_layer_random_every_step"])
         if "sophia_beta1" in direction:
             _set_if_default(args, defaults, "sophia_beta1", direction["sophia_beta1"])
         if "sophia_beta2" in direction:
@@ -396,6 +423,10 @@ def log_step(path: Path, log: StepLog) -> None:
         "step_time_ms": log.step_time_ms,
         "line_search_iters": log.line_search_iters,
         "line_search_accepted": log.line_search_accepted,
+        "gn_selected_count": log.gn_selected_count,
+        "gn_selected_layers": log.gn_selected_layers,
+        "gn_update_time_ms": log.gn_update_time_ms,
+        "gn_apply_time_ms": log.gn_apply_time_ms,
     }
     append_jsonl(path, payload)
 
@@ -451,6 +482,11 @@ def log_epoch(path: Path, split: str, epoch: int, global_step: int, metrics: Tra
                 "precond_update_time_s": metrics.precond_update_time_s,
                 "precond_apply_time_s": metrics.precond_apply_time_s,
                 "precond_layer_stats": metrics.precond_layer_stats,
+                "gn_update_count": metrics.gn_update_count,
+                "gn_apply_count": metrics.gn_apply_count,
+                "gn_update_time_s": metrics.gn_update_time_s,
+                "gn_apply_time_s": metrics.gn_apply_time_s,
+                "gn_layer_stats": metrics.gn_layer_stats,
                 "anderson_applied": metrics.anderson_applied,
                 "anderson_failed": metrics.anderson_failed,
                 "data_wait_time_s": metrics.data_wait_time_s,
@@ -590,6 +626,13 @@ def main() -> int:
         "direction_eps": args.direction_eps,
         "direction_damping": args.direction_damping,
         "direction_update_every": args.direction_update_every,
+        "direction_max_size": args.direction_max_size,
+        "gn_cg_iters": args.gn_cg_iters,
+        "gn_cg_tol": args.gn_cg_tol,
+        "gn_layer_mode": args.gn_layer_mode,
+        "gn_layer_k": args.gn_layer_k,
+        "gn_update_interval": args.gn_update_interval,
+        "gn_layer_random_every_step": args.gn_layer_random_every_step,
         "sophia_beta1": args.sophia_beta1,
         "sophia_beta2": args.sophia_beta2,
         "sophia_gamma": args.sophia_gamma,
@@ -731,6 +774,14 @@ def main() -> int:
                 direction_beta1=args.direction_beta1,
                 direction_damping=args.direction_damping,
                 direction_update_every=args.direction_update_every,
+                direction_max_size=args.direction_max_size,
+                gn_cg_iters=args.gn_cg_iters,
+                gn_cg_tol=args.gn_cg_tol,
+                gn_layer_mode=args.gn_layer_mode,
+                gn_layer_k=args.gn_layer_k,
+                gn_update_interval=args.gn_update_interval,
+                gn_layer_random_every_step=args.gn_layer_random_every_step,
+                gn_layer_seed=seed,
                 sophia_beta1=args.sophia_beta1,
                 sophia_beta2=args.sophia_beta2,
                 sophia_gamma=args.sophia_gamma,
@@ -790,6 +841,7 @@ def main() -> int:
 
         summary = {
             "seed": seed,
+            "gn_layer_seed": seed,
             "steps_per_epoch": len(train_loader),
             "mean_step_time_sec": mean_step_time_sec,
             "targets": summarize_targets(targets, targets_hit, mean_step_time_sec),

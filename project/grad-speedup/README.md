@@ -92,8 +92,16 @@ Notes
   - --step-silver-rho (silver schedule)
   - --step-sagd-delta (SAGD Variant III exponent; default 1e-2)
 - Module B flags (optional):
-  - --direction {none,diag-precond,shampoo,soap,sophia,muon}
+  - --direction {none,diag-precond,gn-layerwise,gn-layerwise-exact,shampoo,soap,sophia,muon}
   - diag-precond: --direction-beta, --direction-eps, --direction-update-every
+  - gn-layerwise (proxy): diagonal empirical Fisher/EMA(g^2); not paper-accurate GN
+    - --direction-beta, --direction-damping, --direction-eps, --direction-update-every
+    - --direction-max-size (0 disables scalar fallback for large layers)
+  - gn-layerwise-exact: per-layer GGN + CG solve + Armijo line search
+    - --direction-damping (Tikhonov), --gn-cg-iters, --gn-cg-tol
+    - --gn-layer-mode {all,topk,bottomk,randomk}, --gn-layer-k, --gn-layer-random-every-step/--no-gn-layer-random-every-step
+    - --gn-update-interval (reuse last GN update for intermediate steps; experimental)
+    - uses --step-backtrack-c/--step-backtrack-rho/--step-backtrack-max for line search
   - shampoo: --direction-beta, --direction-damping, --direction-update-every
   - soap: --direction-beta1, --direction-beta, --direction-eps, --direction-damping, --direction-update-every
   - direction-update-every sets the preconditioning cadence (f); SOAP refreshes eigenvectors, Shampoo refreshes inverse roots.
@@ -116,13 +124,16 @@ Notes
 - Method metrics:
   - step_size_* and line_search_* report step-control stats when enabled
   - clip_coef_* are GGNC tau stats; sophia_hessian_*, sophia_clip_frac_*, muon_ortho_iters_*, precond_* appear in metrics.jsonl when enabled
+  - gn_update_time_s/gn_apply_time_s and gn_layer_stats appear for gn-layerwise-exact; step logs include gn_selected_count/gn_selected_layers and gn_update_time_ms/gn_apply_time_ms
   - precond_layer_stats includes per-layer update/apply counts plus timing fields (stat_update_time_s, precond_update_time_s, apply_time_s).
-- Config keys:
   - modules.step_control.name, modules.step_control.l0, modules.step_control.l1, modules.step_control.fstar
   - modules.step_control.sps_beta, modules.step_control.sps_c, modules.step_control.sps_max
   - modules.step_control.backtrack_c, modules.step_control.backtrack_max, modules.step_control.backtrack_rho
   - modules.step_control.silver_rho, modules.step_control.sagd_delta
-  - modules.direction.name, modules.direction.beta, modules.direction.beta1, modules.direction.eps, modules.direction.damping, modules.direction.update_every
+  - modules.direction.name, modules.direction.beta, modules.direction.beta1, modules.direction.eps, modules.direction.damping, modules.direction.update_every, modules.direction.max_size
+  - modules.direction.gn_cg_iters, modules.direction.gn_cg_tol
+  - modules.direction.gn_layer_mode, modules.direction.gn_layer_k, modules.direction.gn_layer_random_every_step
+  - modules.direction.gn_update_interval
   - modules.direction.sophia_beta1, modules.direction.sophia_beta2, modules.direction.sophia_gamma
   - modules.direction.sophia_eps, modules.direction.sophia_hessian_every, modules.direction.sophia_hutchinson_samples
   - modules.direction.muon_beta, modules.direction.muon_eps, modules.direction.muon_ns_iters
