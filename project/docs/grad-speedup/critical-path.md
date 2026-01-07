@@ -9,7 +9,7 @@ Critical Path (must complete in order)
 2) Method conformance for base grid methods (EoSS, Backtracking, GGNC, Anderson, LinBreg)
 3) Implement EoSS step control (HVP-based curvature) + smoke validation
 4) Grid config generator for 72 conditions + queue runner
-5) Step-based baseline runs (SGD/AdamW; eval_interval_steps=1000)
+5) Step-based baseline runs (SGD/AdamW; eval_interval_steps=200)
 6) 1-seed 72-condition sweep (max_steps=7000)
 7) Promote top-10 configs to 3-seed runs (max_steps=14000)
 8) Decision on winners + follow-up hyperparameter sweeps
@@ -38,8 +38,8 @@ Gates
 - No experiment is accepted unless the method’s paper-accurate spec is present in method-conformance.md.
 - Direction/preconditioning methods are excluded from the base grid until validated.
 
-Status snapshot (2026-01-06)
-- Spec alignment: done (plan/system/combination docs updated).
-- Base-grid methods: EoSS implemented; tune2000 sweep running. Backtracking/GGNC/Anderson/LinBreg validated via screen2000.
+Status snapshot (2026-01-07)
+- Spec alignment: done (plan/system/combination docs updated; baseline + target cadence updated).
+- Baseline: mom0 baseline adopted for the no-schedule regime; previous “wins” under mom0.9 were a confound.
 - Grid infra: queue runner active; 72-condition grid generator still pending.
-- Direction track: Layerwise GN paperpack + reference implementation done; parked after compute-cost review.
+- Direction track: GN-lite experiments completed; parked after compute-cost review.

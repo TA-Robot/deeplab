@@ -1,51 +1,51 @@
 # Experiment Log
 
-- 2026-01-07: 20260107-grad-speedup-gnlite-smoke200 (queued)
+- 2026-01-07: 20260107-grad-speedup-gnlite-smoke200 (done)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
-  - Status: queued (GPU, max_steps=200)
+  - Status: done (GPU, max_steps=200)
   - Notes: gn-layerwise-exact with layer subsampling (k=5, cg_iters=1) to check wall-clock overhead.
   - Run IDs:
     - 20260107-grad-speedup-gnlite-smoke200-topk5
     - 20260107-grad-speedup-gnlite-smoke200-bottomk5
     - 20260107-grad-speedup-gnlite-smoke200-randomk5
 
-- 2026-01-07: 20260107-grad-speedup-gnlite-2000 (queued)
+- 2026-01-07: 20260107-grad-speedup-gnlite-2000 (done)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
-  - Status: queued (GPU, max_steps=2000)
+  - Status: done (GPU, max_steps=2000)
   - Notes: extend GN-lite (top/bottom/random-k) to 2k steps to compare time-to-target.
   - Run IDs:
     - 20260107-grad-speedup-gnlite-2000-topk5
     - 20260107-grad-speedup-gnlite-2000-bottomk5
     - 20260107-grad-speedup-gnlite-2000-randomk5
 
-- 2026-01-07: 20260107-grad-speedup-gnlite-2000-int5 (queued)
+- 2026-01-07: 20260107-grad-speedup-gnlite-2000-int5 (done)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
-  - Status: queued (GPU, max_steps=2000)
+  - Status: done (GPU, max_steps=2000)
   - Notes: GN-lite with update interval=5 (reuse cached GN direction between refreshes).
   - Run IDs:
     - 20260107-grad-speedup-gnlite-2000-topk5-int5
     - 20260107-grad-speedup-gnlite-2000-bottomk5-int5
     - 20260107-grad-speedup-gnlite-2000-randomk5-int5
 
-- 2026-01-07: 20260107-grad-speedup-gnlite-2000-int20 (queued)
+- 2026-01-07: 20260107-grad-speedup-gnlite-2000-int20 (done)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
-  - Status: queued (GPU, max_steps=2000)
+  - Status: done (GPU, max_steps=2000)
   - Notes: GN-lite with update interval=20 (reuse cached GN direction between refreshes).
   - Run IDs:
     - 20260107-grad-speedup-gnlite-2000-topk5-int20
     - 20260107-grad-speedup-gnlite-2000-bottomk5-int20
     - 20260107-grad-speedup-gnlite-2000-randomk5-int20
 
-- 2026-01-07: 20260107-grad-speedup-gnlite-2000-int5-adam (queued)
+- 2026-01-07: 20260107-grad-speedup-gnlite-2000-int5-adam (done)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
-  - Status: queued (GPU, max_steps=2000)
+  - Status: done (GPU, max_steps=2000)
   - Notes: GN-lite topk5 with update interval=5 using Adam optimizer (lr=1e-3).
   - Run IDs:
     - 20260107-grad-speedup-gnlite-2000-topk5-int5-adam
 
-- 2026-01-07: 20260107-grad-speedup-step-ggnc-linbreg-resnet18-maxsteps14000 (queued)
+- 2026-01-07: 20260107-grad-speedup-step-ggnc-linbreg-resnet18-maxsteps14000 (done)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
-  - Status: queued (GPU, max_steps=14000, seeds 0/1/2)
+  - Status: done (GPU, max_steps=14000, seeds 0/1/2)
   - Notes: promote top non-muon configs from tune2000 to 14k for time-to-target comparison.
   - Run IDs:
     - 20260107-grad-speedup-step-ggnc-global-rho1.0-resnet18-maxsteps14000-seeds012
@@ -323,17 +323,17 @@
   - Run IDs:
     - 20260106-grad-speedup-step-baseline-resnet18-maxsteps14000-seeds012
 
-- 2026-01-06: 20260106-grad-speedup-step-l0l1-soap-anderson-resnet18-maxsteps14000-seeds012 (running)
+- 2026-01-06: 20260106-grad-speedup-step-l0l1-soap-anderson-resnet18-maxsteps14000-seeds012 (completed)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
-  - Status: running (GPU, step-based)
+  - Status: completed (GPU, step-based)
   - Notes: max_steps=14,000; eval_interval_steps=1000; eval_interval_epochs=0.
   - Artifact location: project/runs/grad-speedup
   - Run IDs:
     - 20260106-grad-speedup-step-l0l1-soap-anderson-resnet18-maxsteps14000-seeds012
 
-- 2026-01-06: Step-based ablations (queued)
+- 2026-01-06: Step-based ablations (completed)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
-  - Status: queued (auto-start after winner)
+  - Status: completed (GPU, step-based)
   - Notes: max_steps=14,000; eval_interval_steps=1000; eval_interval_epochs=0.
   - Artifact location: project/runs/grad-speedup
   - Run IDs:
@@ -378,9 +378,9 @@
     - 20260106-grad-speedup-screen2000-muon-adamw-seed0
     - 20260106-grad-speedup-screen2000-eoss-sgd-seed0
 
-- 2026-01-06: 20260106-grad-speedup-tune2000-resnet18 (running)
+- 2026-01-06: 20260106-grad-speedup-tune2000-resnet18 (done)
   - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
-  - Status: running (GPU queue)
+  - Status: done (GPU queue)
   - Notes: parameter sweeps for EoSS/Backtracking/GGNC/Anderson/LinBreg/Muon; max_steps=2,000; eval_interval_steps=200.
   - Artifact location: project/runs/grad-speedup
   - Run IDs (prefix):
@@ -407,9 +407,9 @@
   - Run IDs:
     - smoke-gn-layerwise-exact-prof
 
-- 2026-01-06: 20260106-grad-speedup-combo2000-resnet18 (queued)
+- 2026-01-06: 20260106-grad-speedup-combo2000-resnet18 (done)
   - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
-  - Status: queued (GPU queue)
+  - Status: done (GPU queue)
   - Notes: combo sweeps with *derived* parameters (GGNC rho from clip_coef_mean, Anderson from best t60 with zero failures, LinBreg lambda from sparsity extrapolation); max_steps=2,000; eval_interval_steps=200.
   - Artifact location: project/runs/grad-speedup
   - Run IDs:

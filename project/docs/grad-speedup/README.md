@@ -19,7 +19,8 @@ Primary docs
 - Tickets (grad-speedup only): project/docs/grad-speedup/tickets/ready/
 - Paper pack: project/docs/grad-speedup/papers/README.md
 - Dashboard spec: project/docs/grad-speedup/dashboard-spec.md
-- Dashboard implementation: project/grad-speedup/dashboard/README.md
+- Dashboard implementation (Dash): project/grad-speedup/dash/app.py
+- Legacy Streamlit dashboard (deprecated): project/grad-speedup/dashboard/README.md
 
 Scope notes
 - Primary metrics are time-to-target / steps-to-target / cost-to-target.

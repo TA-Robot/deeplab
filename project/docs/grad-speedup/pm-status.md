@@ -6,10 +6,9 @@ Owner: PM
 Current state
 - Spec alignment: updated plan/system/combination docs to the CIFAR-10 spec (72-condition grid).
 - Baseline: SGD+mom=0.9 was weak under fixed-LR/no-schedule; added mom=0.0 baseline which is substantially stronger (now use mom=0.0 as the default baseline for step-control comparisons).
-- Base-grid methods: EoSS implemented; screen2000 validation complete; tune2000 sweep running.
-- Direction track: Layerwise GN paperpack + reference implementation done; excluded from active experiments due to heavy compute.
-- GN-lite: gn-layerwise-exact now supports top/bottom/random-k layer selection with logging for profiling.
-- Dashboard: Dash UI in place; supports time/steps/cost-to-target with legend table.
+- Base-grid methods: current evidence suggests EoSS is not competitive in this fixed-LR/no-schedule regime; GGNC(alpha=1) and LinBreg are viable candidates for combination sweeps.
+- Direction track: Layerwise GN / GN-lite experiments were run for profiling but are currently deprioritized (compute overhead dominates).
+- Dashboard: Dash UI in place; supports time/steps/cost-to-target and learning curves, with legend table + hover-disable controls.
 
 Primary docs
 - CIFAR-10 spec: project/docs/grad-speedup/cifar10-implementation-spec.md
@@ -23,11 +22,11 @@ Tickets (running)
 
 Experiments
 - Legacy SOAP-focused runs are no longer used for decision-making.
-- Screen2000 baseline sweep done; tune2000 sweeps running via queue runner.
+- Momentum ablation completed; mom0 baseline is adopted for the no-schedule regime.
 
 Next PM actions
-- Monitor tune2000 results and promote top configs to 7k/14k runs (under the mom=0.0 baseline).
-- Start 72-condition grid once generator is ready (if still required).
+- Re-run the active comparison series with a tighter eval cadence (eval_interval_steps=200) to make time-to-target curves usable.
+- Start 72-condition grid once the stage-A tuning defaults are fixed (or reduce the grid if the tuning indicates clear dominance relations).
 - Shift dashboard comparisons to time-to-target (drop mean step time as primary).
 - Drop l0l1-only as a primary candidate unless it beats mom=0.0 baseline (current data suggests it doesn't).
 - Treat GGNC alpha<1.0 as unsafe (alpha=0.2 failed); keep alpha=1.0 until re-derived from paper.

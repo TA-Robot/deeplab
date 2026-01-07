@@ -11,8 +11,8 @@
 - **追記（2026-01-07）: momentum が主要な交絡だった**
   - SGD+mom0.9 baseline は 14k で 0.85 到達が 1/3 seed と弱かったが、**SGD+mom0.0 baseline は 0.85 到達が 3/3 seed で time-to-target 105.1±9.2s**（後述）。
   - これにより、前回「最速候補」と見えていた `l0l1-only` は **mom=0.0 に揃えた baseline に負ける**ことが判明（`l0l1` の速さは交絡が大きい）。
-- **現状の14k（max_steps=14,000）での 0.85 到達（time-to-target）最速は `l0l1-only`**（3/3 seed到達、平均 **145.7s**）。ただし **baselineと momentum が揃っていない**（`l0l1` 系は momentum=0.0）ため、速度差の純粋比較としては **要再実験**。
-- **公平寄りの比較（baselineと同じSGD+momentum=0.9）だと `LinBreg(λ=2e-4)` が良い**（3/3 seed到達、平均 **188.3s**）。最終精度も baseline より高い。
+- **現状の14k（max_steps=14,000）での 0.85 到達（time-to-target）最速は `SGD baseline (mom=0.0)`**（3/3 seed到達、平均 **105.1s**）。`l0l1-only` はこの baseline に届かない（後述）。
+- **参考（legacy baseline: SGD+momentum=0.9）では `LinBreg(λ=2e-4)` が良い**（3/3 seed到達、平均 **188.3s**）。ただし baseline が弱い条件なので、現行の意思決定は mom0 baseline 系列を優先する。
 - **`GGNC global (ρ=1.0)` は early target（2kの0.70/0.75）では有効**だが、14kでは 0.85 到達が 2/3 seed、かつ **最終精度が悪化するseedがある**（「一度0.85を踏んでも最終で下がる」ケースあり）。
 - **`SOAP-only` / `l0l1+SOAP(+Anderson)` は step数は減っても壁時計で負け**（SOAP方向計算のオーバーヘッドが支配的）。今回の目的（wall-clock短縮）には不利。
 - **Layerwise GN（paper-accurate）は計算コストが過大**で、実運用の探索からは除外。GN-lite（層サブサンプル＋更新間引き）も 2k 時点で baseline に time-to-target で届かず、優先度を下げる。

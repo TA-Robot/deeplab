@@ -41,10 +41,11 @@ Models
 Training loop
 - Loss: CrossEntropyLoss.
 - Optimizers: SGD+Momentum, AdamW.
+- Baseline note: for fixed-LR/no-schedule comparisons, treat SGD momentum=0.0 (mom0) as the default baseline; SGD momentum=0.9 is a separate “scheduled baseline” series.
 - Determinism: optional flag, record in env.json.
 - Step-based control (primary):
   - max_steps is a hard cap on total optimizer steps.
-  - eval_interval_steps drives evaluation cadence (default 1000).
+  - eval_interval_steps drives evaluation cadence (default 200).
 - Epoch-based control (compat):
   - epochs still supported; avoid double-eval when step eval is enabled.
 - Early stop:
@@ -57,7 +58,7 @@ Step-time measurement
 - Report mean step time (ms) and throughput; prefer torch.cuda.Event on GPU.
 
 Targets and metrics
-- Targets: A* in {0.85, 0.90, 0.92, 0.94}.
+- Targets: A* in {0.80, 0.85, 0.90, 0.92, 0.94} (configurable; short budgets typically use 0.80/0.85).
 - For each target, record:
   - Steps-to-target T(A*)
   - Time-to-target W(A*)
@@ -87,7 +88,7 @@ Config schema (current)
 - optimizer: {type, lr, momentum, weight_decay}
 - train: {epochs, max_steps, deterministic, device}
 - logging: {log_interval_steps, eval_interval_epochs, eval_interval_steps, warmup_steps, measure_steps, grad_norm_every}
-- targets: [0.85, 0.90, 0.92, 0.94]
+- targets: [0.80, 0.85, 0.90, 0.92, 0.94]
 - modules:
   - step_control: {name, beta, hvp_interval, ema, backtrack_c, backtrack_max, backtrack_rho}
   - clip: {mode, rho}

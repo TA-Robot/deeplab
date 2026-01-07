@@ -11,7 +11,7 @@ Cost model
   - c: mean cost per step (wall time proxy)
 
 Primary metrics (must report)
-- Steps-to-target: T(A*) for A* in {0.85, 0.90, 0.92, 0.94}
+- Steps-to-target: T(A*) for A* in {0.80, 0.85, 0.90, 0.92, 0.94} (configurable; for short budgets use 0.80/0.85)
 - Time-to-target: W(A*) (wall time to reach A*)
 - Cost-to-target: C(A*) = T(A*) * mean step time
 - Learning curves: train loss/acc, test acc vs step/epoch/time
@@ -28,6 +28,7 @@ Fixed conditions
 - Normalize: CIFAR-10 mean/std
 - Batch size: 128 (other batch sizes are a separate series)
 - Budget: max_steps is the hard cap (default 100k); early stop on target threshold
+- Baseline note (important): in the fixed-LR/no-schedule regime, SGD momentum=0.0 (mom0) is the default baseline for fair comparisons; SGD momentum=0.9 is treated as a separate “scheduled baseline” series.
 
 Dataset
 - CIFAR-10: train 50k / test 10k
@@ -41,7 +42,8 @@ Training loop requirements
 - Loss: CrossEntropyLoss (no label smoothing)
 - Logging cadence:
   - train metrics every N steps (default 100)
-  - test acc every eval_interval_steps (default 1000) and/or per epoch
+  - test acc every eval_interval_steps (default 200) and/or per epoch
+  - keep eval cadence identical across compared runs (time-to-target resolution depends on it)
 - Early stop modes:
   - "max": continue until highest A* reached
   - "first": stop at first threshold reached
@@ -77,7 +79,8 @@ Logging requirements
 - Record warmup/measure steps and hardware details
 
 Acceptance criteria (initial)
-- Baseline reaches A* = 0.90 within budget
+- Baseline reaches A* = 0.85 within the current promotion budget (e.g., max_steps=14000) in the no-schedule regime
+- If A* >= 0.90 is required, run a separate “scheduled baseline” series (e.g., cosine LR) and compare within that regime
 - At least one configuration improves cost-to-target by >= 1.5x vs baseline at A*
 - No training instability (NaNs, divergence)
 

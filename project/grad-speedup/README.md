@@ -28,6 +28,11 @@ cd project/grad-speedup
 python scripts/run_cifar10.py --model resnet18 --optimizer sgd --epochs 1 --run-id 20260105-grad-speedup-cifar10-smoke
 ```
 
+Defaults (important)
+- SGD momentum defaults to 0.0 for this track’s fixed-LR/no-schedule comparisons.
+- Test eval defaults to step-based cadence: `--eval-interval-steps 200` and `--eval-interval-epochs 0`.
+- Target thresholds default to `0.80,0.85,0.90,0.92,0.94` (configure per budget).
+
 Batch launch
 ```
 cd project/grad-speedup

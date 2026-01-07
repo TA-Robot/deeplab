@@ -19,17 +19,17 @@ Base grid definition (72 conditions)
 Execution stages
 Stage A: Single-module tuning (1 seed)
 - Fix hyperparameters for EoSS, Backtracking, GGNC, Anderson, LinBreg.
-- Budget: max_steps=7000, eval_interval_steps=1000.
+- Budget: max_steps=7000, eval_interval_steps=200.
 - Output: recommended hyperparameter defaults for grid.
 
 Stage B: 72-condition sweep (1 seed)
-- Budget: max_steps=7000, eval_interval_steps=1000.
-- Rank by cost-to-target at A* = 0.90 and 0.94 (both reported).
+- Budget: max_steps=7000, eval_interval_steps=200.
+- Rank by time-to-target at A* = 0.80 and 0.85 (both reported); also report 0.90+ if any runs hit it.
 
 Stage C: Promotion (multi-seed)
 - Top-10 configs from Stage B.
 - Budget: max_steps=14000, seeds {0,1,2}.
-- Output: mean/std for steps/time/cost-to-target at A* thresholds.
+- Output: mean/std for steps/time/cost-to-target at A* thresholds (primary: 0.85; secondary: 0.90+).
 
 Separate track (direction / preconditioning)
 - Layerwise GN and SOAP fast-check run in parallel to Stage A/B.
@@ -43,3 +43,4 @@ Notes
 - Do not mix multiple step-control methods in one run.
 - Do not combine multiple direction/preconditioning methods.
 - All runs must log per-target steps/time/cost + step-time statistics.
+- Baseline regime: for fixed-LR/no-schedule comparisons, use SGD momentum=0.0 (mom0) as the baseline; keep “scheduled baseline” runs separate.

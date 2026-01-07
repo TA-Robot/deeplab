@@ -41,7 +41,7 @@ Phase 3: Experiment infrastructure
 - Ensure summary aggregation emits steps/time/cost-to-target per A*.
 
 Phase 4: Execution (step-based)
-- Baseline runs (SGD/AdamW) with max_steps and eval_interval_steps=1000.
+- Baseline runs (SGD/AdamW) with max_steps and eval_interval_steps=200.
 - Single-module tuning (1 seed, max_steps=7000) to fix hyperparameters.
 - 72-condition sweep (1 seed, max_steps=7000) for ranking.
 - Promote top-10 (max_steps=14000, seeds 0/1/2) for final comparison.
@@ -57,7 +57,8 @@ Critical-path reference
 
 Decision gates
 - No module enters the grid until paper-accurate behavior is verified.
-- If baseline fails to reach A*=0.90 within budget, adjust baseline before running the grid.
+- If baseline fails to reach A*=0.85 within the current promotion budget, adjust baseline before running the grid.
+- If A*>=0.90 is required, run a separate “scheduled baseline” series and compare within that regime.
 - If any module destabilizes training, it stays out of combinations until fixed.
 
 Next actions (immediate)

@@ -6,7 +6,8 @@ Goal
 
 Scope
 - Data source: run artifacts under `project/runs/grad-speedup/`.
-- Code lives under `project/grad-speedup/dashboard/` and `project/grad-speedup/scripts/`.
+- Code lives under `project/grad-speedup/dash/` (primary) and `project/grad-speedup/scripts/`.
+- `project/grad-speedup/dashboard/` is treated as legacy (Streamlit prototype).
 - No external services; run locally.
 
 Data inputs (per run)
@@ -29,27 +30,24 @@ Derived metrics
 - Memory: max_memory_bytes (if logged).
 - Relative deltas: baseline-normalized ratios per target (time/cost/steps).
 
-Dashboard UI (Streamlit)
-- Sidebar filters: run_id, model, optimizer, step_rule, direction, clip_mode, sparsity, anderson, date range.
+Dashboard UI (Plotly Dash)
+- Left sidebar (controls): runs dir, queue file, reload, filters (model/optimizer/step_rule/direction/seed), target accuracy.
+- Plot controls: color-by, legend position, label truncation, legend table toggle, hover disable toggle.
 - Tabs:
   1) Overview
-     - Run table (sortable): run_id, model, optimizer, modules, mean step time, targets reached.
-     - Scatter: cost-to-target vs accuracy (select target).
-     - Bar: speedup vs baseline for selected target (if baseline chosen).
-  2) Run Detail
-     - Select run + seed.
-     - Curves: train loss/acc vs step/time; test acc vs epoch.
-     - Step diagnostics: step_size, grad_norm, curvature, lr vs step/time.
-     - Step time distribution (hist + p50/p90).
-  3) Compare
-     - Overlay curves across runs (test acc vs epoch/time, train loss vs step/time).
-     - Summary table with deltas vs baseline.
+     - KPI cards: run coverage + best/median time-to-target.
+     - Scatter: time-to-target (or cost-to-target) vs quality at selected target.
+     - Leaderboard table (sortable/filterable) with run metadata + status/progress; selecting a row or clicking the scatter picks the run.
+     - Bar chart: top-N fastest runs (target-specific).
+  2) Compare
+     - Select multiple runs.
+     - Overlay curves: test acc vs epoch/time; train loss vs global_step.
+     - Legend table (optional) shows full labels when legend is truncated.
+  3) Run Detail
+     - Run selector + per-run metadata, config/env view.
+     - Curves + per-target summary.
   4) Diagnostics
-     - Line search acceptance/reject counts, avg iters.
-     - Preconditioner update/apply counts and time.
-     - Sparsity fraction and effective FLOPs.
-  5) System
-     - Device/torch info per run; deterministic flags.
+     - Grad norm / curvature / sparsity curves (when logged).
 
 Export
 - Allow CSV export of run table and selected curves.

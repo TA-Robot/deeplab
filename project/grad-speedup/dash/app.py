@@ -346,7 +346,11 @@ def apply_run_filters(
     return df
 
 
-app = Dash(__name__, suppress_callback_exceptions=True)
+app = Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    assets_folder=str(DASH_DIR / "assets"),
+)
 app.title = "Grad-Speedup Dashboard"
 
 load_data(str(DEFAULT_RUNS_DIR), str(DEFAULT_QUEUE_FILE))
@@ -588,8 +592,61 @@ def build_overview_tab(
     disable_hover: bool,
     target_value: Optional[float],
 ) -> list:
+    def placeholder(message: str) -> list:
+        empty_fig = px.scatter(pd.DataFrame({"x": [], "y": []}), x="x", y="y", title="Speed vs quality")
+        empty_fig.add_annotation(
+            text=message,
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+        )
+        empty_fig.update_layout(
+            margin=dict(l=40, r=40, t=50, b=40),
+            font_family="Space Grotesk, sans-serif",
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            showlegend=False,
+        )
+
+        leaderboard_table = dash_table.DataTable(
+            id="overview-leaderboard",
+            data=[],
+            columns=[{"name": "run", "id": "run_label"}],
+            page_size=12,
+            row_selectable="single",
+            sort_action="native",
+            filter_action="native",
+            style_table={"overflowX": "auto"},
+            style_cell={"fontFamily": "IBM Plex Mono, monospace", "fontSize": "0.78rem"},
+        )
+
+        return [
+            html.Div(
+                className="overview-header",
+                children=[
+                    html.Div("Overview", className="section-title"),
+                    html.Div(message, className="status-text"),
+                ],
+            ),
+            html.Div(
+                className="overview-grid",
+                children=[
+                    dcc.Graph(id="speed-scatter", figure=empty_fig),
+                    html.Div(
+                        className="overview-card",
+                        children=[
+                            html.Div("Leaderboard (fastest)", className="section-title"),
+                            leaderboard_table,
+                        ],
+                    ),
+                ],
+            ),
+        ]
+
     if runs_df.empty:
-        return [html.Div("No runs available for the current filters.")]
+        return placeholder("No runs available for the current filters.")
     run_id_col = resolve_col(runs_df, RUN_ID_CANDIDATES)
     speed_metric = pick_metric(
         runs_df,
@@ -597,7 +654,7 @@ def build_overview_tab(
     )
     quality_metric = pick_metric(runs_df, ["final_test_acc", "best_test_acc", "test_acc", "val_acc", "accuracy"])
     if speed_metric is None or quality_metric is None or run_id_col is None:
-        return [html.Div("Required metrics are missing for overview plots.")]
+        return placeholder("Required metrics are missing for overview plots.")
 
     plot_df, color_col = prepare_color_column(runs_df, color_by, truncate, max_len)
     plot_df = plot_df.copy()

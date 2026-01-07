@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=0.1)
     parser.add_argument("--optimizer", choices=OPT_CHOICES, default="sgd")
-    parser.add_argument("--momentum", type=float, default=0.9)
+    parser.add_argument("--momentum", type=float, default=0.0)
     parser.add_argument("--weight-decay", type=float, default=5e-4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--seeds", type=str, default="")
@@ -54,9 +54,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", type=str, default="data")
     parser.add_argument("--download", action="store_true")
     parser.add_argument("--log-interval-steps", type=int, default=100)
-    parser.add_argument("--eval-interval-epochs", type=int, default=1)
-    parser.add_argument("--eval-interval-steps", type=int, default=0)
-    parser.add_argument("--target-acc", type=str, default="0.85,0.90,0.92,0.94")
+    parser.add_argument("--eval-interval-epochs", type=int, default=0)
+    parser.add_argument("--eval-interval-steps", type=int, default=200)
+    parser.add_argument("--target-acc", type=str, default="0.80,0.85,0.90,0.92,0.94")
     parser.add_argument("--early-stop", choices=("max", "first"), default="max")
     parser.add_argument("--warmup-steps", type=int, default=50)
     parser.add_argument("--measure-steps", type=int, default=200)
@@ -697,6 +697,7 @@ def main() -> int:
         targets_hit: Dict[float, Optional[Dict[str, float]]] = {t: None for t in targets}
         max_target = max(targets) if targets else None
         last_eval_step: Optional[int] = None
+        last_epoch = 0
 
         total_step_time_s = 0.0
         total_step_count = 0
@@ -732,6 +733,7 @@ def main() -> int:
         for epoch in range(1, args.epochs + 1):
             if args.max_steps > 0 and global_step >= args.max_steps:
                 break
+            last_epoch = epoch
             epoch_start = time.perf_counter()
 
             def _log_fn(step_log: StepLog) -> None:
@@ -834,6 +836,9 @@ def main() -> int:
                 break
             if args.max_steps > 0 and global_step >= args.max_steps:
                 break
+
+        if last_eval_step != global_step:
+            _record_eval(global_step, last_epoch)
 
         mean_step_time_sec = None
         if total_step_count > 0:
