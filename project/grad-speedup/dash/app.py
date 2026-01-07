@@ -41,6 +41,7 @@ COLOR_CANDIDATES = [
     "run_id",
     "model",
     "optimizer",
+    "param_mode",
     "step_rule",
     "direction",
     "clip_mode",
@@ -122,6 +123,24 @@ def format_accuracy(value: Optional[float]) -> str:
 
 def summarize_run(row: pd.Series) -> str:
     pieces = []
+    param_mode = str(row.get("param_mode", "")) if isinstance(row, pd.Series) else ""
+    if param_mode and param_mode not in ("none", "None"):
+        detail = ""
+        if param_mode == "relora":
+            scope = str(row.get("relora_scope", "")).strip()
+            rank = row.get("relora_rank")
+            interval = row.get("relora_merge_interval")
+            extras = []
+            if scope and scope.lower() != "none":
+                extras.append(scope)
+            if isinstance(rank, (int, float)) and float(rank) > 0:
+                extras.append(f"r{int(rank)}")
+            if isinstance(interval, (int, float)) and float(interval) > 0:
+                extras.append(f"T{int(interval)}")
+            if extras:
+                detail = f" ({' '.join(extras)})"
+        pieces.append(f"param:{param_mode}{detail}")
+
     for col in ["model", "optimizer", "step_rule", "direction", "clip_mode", "sparsity"]:
         if col not in row:
             continue
@@ -823,6 +842,7 @@ def build_overview_tab(
         "run_label",
         speed_metric,
         quality_metric,
+        "param_mode",
         "model",
         "optimizer",
         "step_rule",

@@ -49,6 +49,7 @@ Table
 | Control / ODE | PIDAO | Nature Comms 15:6221 (2024) | audited | optional | PID control in optimization |
 | Compression | PowerSGD | arXiv:1905.13727 | audited | optional | Low-rank gradient compression |
 | Compression | Deep Gradient Compression | arXiv:1712.01887 | audited | optional | Gradient sparsification |
+| Parametrization | ReLoRA | arXiv:2307.05695 | implemented | optional | Periodic merge/reset of LoRA adapters; paper applies to linear layers. Our conv support is experimental. |
 | Scaling / batch | Critical Batch Size (CBS) | arXiv:1812.06162 | audited | optional | GNS / CBS estimation |
 | Scaling / batch | Super-Convergence / 1cycle | arXiv:1708.07120 | audited | optional | Aggressive LR schedule |
 | Scaling / batch | Large-batch scaling notes | arXiv:1708.03888; arXiv:1904.00962 | audited | optional | LARS/LAMB context |
@@ -123,6 +124,16 @@ Adaptive Backtracking Line Search (arXiv:2408.13150)
 - Adaptive factor (Eq. 4b): ρ̂(v(α_k)) := max(ε, ρ^{(1−c)/(1−c v(α_k))}).
 - Backtracking loop (Algorithm 2): while v(α_k) < 1, set α_k ← ρ̂(v(α_k)) α_k.
 - Hyperparameters: c, ρ, ε.
+
+ReLoRA (High-Rank Training Through Low-Rank Updates) (arXiv:2307.05695)
+- Algorithm 1 (Appendix A / ar5iv HTML):
+  - Replace (paper: linear) layers with LoRA-style low-rank adapters and freeze the base weights.
+  - Train only the low-rank parameters; every T steps, merge the low-rank update into the frozen weights.
+  - After merge: reinitialize LoRA following best practice (A: Kaiming init, B: zeros).
+  - Reset/prune optimizer state after merge (paper uses magnitude pruning of Adam states and LR warmup; implementation supports reset or magnitude pruning for adapter params).
+- Implementation status:
+  - `project/grad-speedup/src/relora.py`: ReLoRAController + ReLoRA Linear/Conv2d wrappers.
+  - Paper-accurate scope is `relora_scope=linear`; conv wrapping is provided as an experimental extension for CIFAR ResNets.
 
 GGNC (Generalized Gradient Norm Clipping) (arXiv:2506.01913)
 - Method definition (Eq. GGNC), page 3:

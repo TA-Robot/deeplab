@@ -22,6 +22,7 @@ sys.path.insert(0, str(GS_ROOT))
 
 from src.data import DataConfig, get_cifar10_loaders  # noqa: E402
 from src.models import ModelConfig, build_model  # noqa: E402
+from src.relora import ReLoRAController  # noqa: E402
 from src.train import EvalMetrics, StepLog, TrainMetrics, evaluate, set_seed, train_one_epoch  # noqa: E402
 
 
@@ -29,6 +30,8 @@ MODEL_CHOICES = ("resnet18", "small-cnn")
 OPT_CHOICES = ("sgd", "adam")
 MUON_SCALE_CHOICES = ("none", "baseline", "update-norm", "adjusted-lr")
 GN_LAYER_CHOICES = ("all", "topk", "bottomk", "randomk")
+PARAM_MODE_CHOICES = ("none", "relora")
+RELORA_SCOPE_CHOICES = ("linear", "resnet-layer4", "resnet-layer3-4", "all")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -61,6 +64,31 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--warmup-steps", type=int, default=50)
     parser.add_argument("--measure-steps", type=int, default=200)
     parser.add_argument("--grad-norm-every", type=int, default=0)
+    parser.add_argument("--param-mode", choices=PARAM_MODE_CHOICES, default="none")
+    parser.add_argument("--relora-rank", type=int, default=4)
+    parser.add_argument("--relora-alpha", type=float, default=1.0)
+    parser.add_argument("--relora-dropout", type=float, default=0.0)
+    parser.add_argument("--relora-scope", choices=RELORA_SCOPE_CHOICES, default="linear")
+    parser.add_argument("--relora-merge-interval", type=int, default=1000)
+    parser.add_argument(
+        "--relora-reset-optimizer",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Reset optimizer state for LoRA params at each merge (ReLoRA-style).",
+    )
+    parser.add_argument(
+        "--relora-prune-optimizer-fraction",
+        type=float,
+        default=0.0,
+        help="Magnitude-prune this fraction of optimizer state tensors after each merge (ignored when reset_optimizer is on).",
+    )
+    parser.add_argument("--relora-train-bias", action="store_true", help="Keep base-layer bias trainable under ReLoRA.")
+    parser.add_argument(
+        "--relora-warmstart-steps",
+        type=int,
+        default=0,
+        help="Optional warm-start steps with full training before switching to ReLoRA.",
+    )
     parser.add_argument(
         "--step-rule",
         choices=("none", "eoss", "l0l1", "sps", "sps-momentum", "adaptive-backtracking", "sagd", "silver"),
@@ -391,16 +419,19 @@ def run_id_default(args: argparse.Namespace) -> str:
 
 
 def build_optimizer(args: argparse.Namespace, model: torch.nn.Module) -> torch.optim.Optimizer:
+    params = [p for p in model.parameters() if p.requires_grad]
+    if not params:
+        params = list(model.parameters())
     if args.optimizer == "sgd":
         return torch.optim.SGD(
-            model.parameters(),
+            params,
             lr=args.lr,
             momentum=args.momentum,
             weight_decay=args.weight_decay,
         )
     if args.optimizer == "adam":
         return torch.optim.Adam(
-            model.parameters(),
+            params,
             lr=args.lr,
             weight_decay=args.weight_decay,
         )
@@ -497,6 +528,8 @@ def log_epoch(path: Path, split: str, epoch: int, global_step: int, metrics: Tra
                 "sparsity_updates": metrics.sparsity_updates,
                 "sparsity_update_interval": metrics.sparsity_update_interval,
                 "sparsity_update_rate": metrics.sparsity_update_rate,
+                "relora_merge_count": metrics.relora_merge_count,
+                "relora_merge_time_s": metrics.relora_merge_time_s,
             }
         )
     append_jsonl(path, payload)
@@ -603,6 +636,16 @@ def main() -> int:
         "warmup_steps": args.warmup_steps,
         "measure_steps": args.measure_steps,
         "grad_norm_every": args.grad_norm_every,
+        "param_mode": args.param_mode,
+        "relora_rank": args.relora_rank,
+        "relora_alpha": args.relora_alpha,
+        "relora_dropout": args.relora_dropout,
+        "relora_scope": args.relora_scope,
+        "relora_merge_interval": args.relora_merge_interval,
+        "relora_reset_optimizer": args.relora_reset_optimizer,
+        "relora_prune_optimizer_fraction": args.relora_prune_optimizer_fraction,
+        "relora_train_bias": args.relora_train_bias,
+        "relora_warmstart_steps": args.relora_warmstart_steps,
         "step_rule": args.step_rule,
         "step_eoss_beta": args.step_eoss_beta,
         "step_eoss_ema": args.step_eoss_ema,
@@ -689,6 +732,7 @@ def main() -> int:
 
         model = build_model(ModelConfig(name=args.model))
         model = model.to(device)
+        relora_controller: Optional[ReLoRAController] = None
         optimizer = build_optimizer(args, model)
 
         global_step = 0
@@ -730,6 +774,12 @@ def main() -> int:
                     _record_eval(step, step_epoch)
             return args.max_steps > 0 and step >= args.max_steps
 
+        def _warmstart_on_step_end(step: int, step_epoch: int, step_in_epoch: int) -> bool:
+            stop = _on_step_end(step, step_epoch, step_in_epoch)
+            if args.param_mode == "relora" and args.relora_warmstart_steps > 0:
+                return stop or step >= args.relora_warmstart_steps
+            return stop
+
         for epoch in range(1, args.epochs + 1):
             if args.max_steps > 0 and global_step >= args.max_steps:
                 break
@@ -738,6 +788,39 @@ def main() -> int:
 
             def _log_fn(step_log: StepLog) -> None:
                 log_step(metrics_path, step_log)
+
+            if args.param_mode == "relora" and relora_controller is None and global_step >= args.relora_warmstart_steps:
+                relora_controller = ReLoRAController.apply(
+                    model,
+                    merge_interval=args.relora_merge_interval,
+                    rank=args.relora_rank,
+                    alpha=args.relora_alpha,
+                    scope=args.relora_scope,
+                    dropout=args.relora_dropout,
+                    train_bias=args.relora_train_bias,
+                    reset_optimizer_state=args.relora_reset_optimizer,
+                    prune_optimizer_state_fraction=args.relora_prune_optimizer_fraction,
+                )
+                optimizer = build_optimizer(args, model)
+
+            if relora_controller is None and args.param_mode == "relora" and args.relora_warmstart_steps > 0:
+                active_step_rule = "none"
+                active_direction = "none"
+                active_clip_mode = "none"
+                active_sparsity = "none"
+                active_anderson_memory = 0
+                active_anderson_interval = 0
+                active_on_step_end = _warmstart_on_step_end
+                active_relora = None
+            else:
+                active_step_rule = args.step_rule
+                active_direction = args.direction
+                active_clip_mode = args.clip_mode
+                active_sparsity = args.sparsity
+                active_anderson_memory = args.anderson_memory
+                active_anderson_interval = args.anderson_interval
+                active_on_step_end = _on_step_end
+                active_relora = relora_controller
 
             train_metrics, global_step = train_one_epoch(
                 model=model,
@@ -748,11 +831,11 @@ def main() -> int:
                 global_step=global_step,
                 log_interval=args.log_interval_steps,
                 log_fn=_log_fn,
-                on_step_end=_on_step_end,
+                on_step_end=active_on_step_end,
                 warmup_steps=args.warmup_steps,
                 measure_steps=args.measure_steps,
                 grad_norm_every=args.grad_norm_every,
-                step_rule=args.step_rule,
+                step_rule=active_step_rule,
                 step_eoss_beta=args.step_eoss_beta,
                 step_eoss_ema=args.step_eoss_ema,
                 step_eoss_interval=args.step_eoss_interval,
@@ -770,7 +853,7 @@ def main() -> int:
                 step_backtrack_rho=args.step_backtrack_rho,
                 step_silver_rho=args.step_silver_rho,
                 step_sagd_delta=args.step_sagd_delta,
-                direction=args.direction,
+                direction=active_direction,
                 direction_beta=args.direction_beta,
                 direction_eps=args.direction_eps,
                 direction_beta1=args.direction_beta1,
@@ -796,17 +879,18 @@ def main() -> int:
                 muon_scale_mode=args.muon_scale_mode,
                 muon_rms_scale=args.muon_rms_scale,
                 muon_hidden_size=args.muon_hidden_size,
-                clip_mode=args.clip_mode,
+                clip_mode=active_clip_mode,
                 clip_rho=args.clip_rho,
                 clip_alpha=args.clip_alpha,
-                sparsity=args.sparsity,
+                sparsity=active_sparsity,
                 sparsity_lambda=args.sparsity_lambda,
                 sparsity_update_interval=args.sparsity_update_interval,
-                anderson_memory=args.anderson_memory,
-                anderson_interval=args.anderson_interval,
+                anderson_memory=active_anderson_memory,
+                anderson_interval=active_anderson_interval,
                 anderson_damping=args.anderson_damping,
                 anderson_lambda=args.anderson_lambda,
                 anderson_state=anderson_state,
+                relora=active_relora,
                 diagnostics=args.diagnostics,
             )
             log_epoch(metrics_path, "train", epoch, global_step, train_metrics)

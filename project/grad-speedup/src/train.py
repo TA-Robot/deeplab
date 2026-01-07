@@ -20,6 +20,7 @@ except Exception:
     from torch.nn.utils.stateless import functional_call as _stateless_functional_call
 
 from .modules import SUPPORTED_CLIP_MODES, SUPPORTED_DIRECTIONS, SUPPORTED_SPARSITY, SUPPORTED_STEP_RULES
+from .relora import ReLoRAController
 
 MUON_NS_COEFFS = (3.4445, -4.7750, 2.0315)
 MUON_SCALE_MODES = ("none", "baseline", "update-norm", "adjusted-lr")
@@ -85,6 +86,8 @@ class TrainMetrics:
     sparsity_updates: int = 0
     sparsity_update_interval: Optional[int] = None
     sparsity_update_rate: Optional[float] = None
+    relora_merge_count: int = 0
+    relora_merge_time_s: Optional[float] = None
 
 
 @dataclass
@@ -683,6 +686,7 @@ def train_one_epoch(
     anderson_damping: float = 0.5,
     anderson_lambda: float = 1e-4,
     anderson_state: Optional[list[tuple[torch.Tensor, torch.Tensor]]] = None,
+    relora: Optional[ReLoRAController] = None,
     diagnostics: bool = False,
 ) -> tuple[TrainMetrics, int]:
     model.train()
@@ -902,6 +906,8 @@ def train_one_epoch(
     dense_flops_vals: list[float] = []
     effective_flops_vals: list[float] = []
     sparsity_update_count = 0
+    relora_merge_count = 0
+    relora_merge_time_s = 0.0
     line_search_iters_list: list[int] = []
     line_search_attempts = 0
     line_search_accepted = 0
@@ -1981,6 +1987,12 @@ def train_one_epoch(
                     except Exception:
                         anderson_failed += 1
 
+        if relora is not None:
+            merge_time = relora.maybe_merge(step=global_step + 1, optimizer=optimizer, device=device)
+            if merge_time is not None:
+                relora_merge_count += 1
+                relora_merge_time_s += float(merge_time)
+
         if measure_this:
             elapsed = timer.stop()
             step_times.append(elapsed)
@@ -2122,6 +2134,10 @@ def train_one_epoch(
         if device.type == "cuda":
             max_memory_bytes = int(torch.cuda.max_memory_allocated())
 
+    relora_merge_time_s_val = None
+    if relora_merge_count > 0:
+        relora_merge_time_s_val = float(relora_merge_time_s)
+
     metrics = TrainMetrics(
         loss=float(avg_loss),
         accuracy=float(accuracy),
@@ -2181,6 +2197,8 @@ def train_one_epoch(
         sparsity_updates=sparsity_update_count,
         sparsity_update_interval=sparsity_update_interval if sparsity_enabled and sparse_params else None,
         sparsity_update_rate=sparsity_update_rate,
+        relora_merge_count=relora_merge_count,
+        relora_merge_time_s=relora_merge_time_s_val,
     )
     return metrics, global_step
 

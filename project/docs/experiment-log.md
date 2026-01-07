@@ -1,5 +1,15 @@
 # Experiment Log
 
+- 2026-01-07: 20260107-grad-speedup-screen2000-relora-layer34-r4-T1000-ws200-resnet18-sgd-seed0-v2 (completed)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: completed (GPU, max_steps=2000)
+  - Notes: first ReLoRA (conv+linear) screening on resnet18; scope=resnet-layer3-4, rank=4, merge_interval=1000, warmstart_steps=200.
+    - Result: slower mean step time vs baseline mom0 (22.9ms vs 13.8ms) and weaker early accuracy (hits 0.60 at step 1600; baseline hits 0.70 at step 1600).
+    - Next: try narrower scope (layer4-only) and/or lower rank to reduce overhead; consider linear-only scope for paper-accurate baseline.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-layer34-r4-T1000-ws200-resnet18-sgd-seed0-v2
+
 - 2026-01-07: 20260107-grad-speedup-gnlite-smoke200 (done)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
   - Status: done (GPU, max_steps=200)

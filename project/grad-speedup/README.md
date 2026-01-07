@@ -124,6 +124,13 @@ Notes
 - Module E flags (optional):
   - --anderson-memory, --anderson-interval, --anderson-damping, --anderson-lambda
   - anderson_damping is the Algorithm 1 mixing parameter beta_t; anderson_lambda is ridge regularization
+- Parametrization flags (optional):
+  - --param-mode {none,relora}
+  - ReLoRA (arXiv:2307.05695): periodically merge/reset low-rank adapters to reduce the number of trained parameters (and optimizer state).
+    - --relora-scope {linear,resnet-layer4,resnet-layer3-4,all}
+    - --relora-rank, --relora-alpha, --relora-dropout
+    - --relora-merge-interval, --relora-warmstart-steps
+    - --relora-reset-optimizer/--no-relora-reset-optimizer, --relora-prune-optimizer-fraction
 - Diagnostics:
   - --diagnostics (enables data-wait and max-memory stats)
 - Method metrics:
