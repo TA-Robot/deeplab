@@ -78,3 +78,8 @@
 - Queued GN-lite 2000-step interval=5 runs (topk/bottomk/randomk).
 - Queued GN-lite 2000-step interval=20 runs (topk/bottomk/randomk).
 - Queued GN-lite 2000-step topk5 interval=5 with Adam (lr=1e-3).
+- Ran momentum ablations:
+  - New baseline: SGD + momentum=0.0 (14k, seeds012) reaches 0.85 on 3/3 seeds with much lower time-to-target than momentum=0.9 baseline.
+  - l0l1-only (2k, seed0) is slightly slower than baseline mom=0.0 at early targets, suggesting momentum confound dominates.
+- GGNC EMA attempt: ggnc-global rho=1.0 with alpha=0.2 failed to learn (2000 step test acc ~0.46); treat alpha<1 as unsafe in current implementation.
+- Fixed LinBreg epoch logging bug: `samples` was accidentally overwritten by parameter count when computing sparsity stats; now `samples` remains correct and sparse param totals are tracked separately.

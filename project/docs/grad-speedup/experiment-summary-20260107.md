@@ -8,6 +8,9 @@
 
 ## 0. まず結論（要点）
 
+- **追記（2026-01-07）: momentum が主要な交絡だった**
+  - SGD+mom0.9 baseline は 14k で 0.85 到達が 1/3 seed と弱かったが、**SGD+mom0.0 baseline は 0.85 到達が 3/3 seed で time-to-target 105.1±9.2s**（後述）。
+  - これにより、前回「最速候補」と見えていた `l0l1-only` は **mom=0.0 に揃えた baseline に負ける**ことが判明（`l0l1` の速さは交絡が大きい）。
 - **現状の14k（max_steps=14,000）での 0.85 到達（time-to-target）最速は `l0l1-only`**（3/3 seed到達、平均 **145.7s**）。ただし **baselineと momentum が揃っていない**（`l0l1` 系は momentum=0.0）ため、速度差の純粋比較としては **要再実験**。
 - **公平寄りの比較（baselineと同じSGD+momentum=0.9）だと `LinBreg(λ=2e-4)` が良い**（3/3 seed到達、平均 **188.3s**）。最終精度も baseline より高い。
 - **`GGNC global (ρ=1.0)` は early target（2kの0.70/0.75）では有効**だが、14kでは 0.85 到達が 2/3 seed、かつ **最終精度が悪化するseedがある**（「一度0.85を踏んでも最終で下がる」ケースあり）。
@@ -78,6 +81,7 @@
 | 系列 | Run ID | 到達seed数 | time-to-target@0.85 (s) | steps-to-target@0.85 | 最終test acc（14k） |
 |---|---|---:|---:|---:|---:|
 | Baseline (SGD+mom0.9) | `20260106-grad-speedup-step-baseline-resnet18-maxsteps14000-seeds012` | 1/3 | 262.0（n=1） | 14000（n=1） | 0.8457±0.0189 |
+| Baseline (SGD+mom0.0) | `20260107-grad-speedup-step-baseline-mom0-resnet18-maxsteps14000-seeds012` | **3/3** | **105.1±9.2** | 6667±577 | **0.8885±0.0092** |
 | GGNC global (ρ=1.0) | `20260107-grad-speedup-step-ggnc-global-rho1.0-resnet18-maxsteps14000-seeds012` | 2/3 | 203.6±15.6（n=2） | 9500±707（n=2） | 0.8299±0.0133 |
 | GGNC layerwise (ρ=0.5) | `20260107-grad-speedup-step-ggnc-layerwise-rho0.5-resnet18-maxsteps14000-seeds012` | 0/3 | — | — | 0.83前後（seed毎に0.815〜0.849） |
 | LinBreg (λ=2e-4) | `20260107-grad-speedup-step-linbreg-l2e-4-resnet18-maxsteps14000-seeds012` | **3/3** | 188.3±26.2 | 8333±1528 | **0.8753±0.0105** |
@@ -90,6 +94,10 @@
 
 ### 3.2 ここから読み取れること
 
+- **baselineの改善は “momentum=0.0” だけで大きく出た**（schedule無し/固定LRの現設定では、mom0.9よりmom0.0の方が「到達stepが減って速い」）。
+- したがって、現時点の主張を整理すると:
+  - `l0l1-only` の “速さ” は、少なくともこの設定では **step則そのものより momentum 交絡の寄与が大きい**可能性が高い。
+  - 今後の比較は **SGD+mom0.0 を基準**に置いた上で、各モジュールの純効果（併用含む）を見るのが妥当。
 - **SOAP方向（`direction=soap`）は step数は減っても、壁時計で大敗**しやすい（`mean_step_time_sec` が ~0.13s と baselineの ~0.016s に対して約8倍）。
 - **LinBreg は step が多少増えても壁時計で勝てている**（step当たりは遅いが、到達stepが減る）。
 - **GGNC global は「到達の早さ」は出るが、最終精度が落ちるseedがある**ため、guardrail（最終精度 or 安定到達）をどう置くかが重要。
@@ -149,4 +157,3 @@
 
 - 実験成果物: `project/runs/grad-speedup/<run_id>/`
 - 主要runの一覧は `project/docs/experiment-log.md` を参照。
-

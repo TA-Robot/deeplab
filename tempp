@@ -252,60 +252,22 @@ GGNCは 2k で強いので、併用の形は「ずっとかける」より **“
 
 ---
 
-## 追加実験（次に何を回すか）
+## 追加実験の結果（done / 2026-01-07）
 
-結論から言うと、今の結果から「併用で最大どこまで狙えるか」を詰めるには、まず **(A) 交絡の除去** と **(B) GGNCの“序盤だけ強い”を活かす設計** を優先するのがクリティカルパスです。
+### A) momentum 交絡の切り分け（結論）
 
-### A. 交絡（momentum）を切り分ける（最優先・最少本数）
+- **SGD baseline（mom=0.0, 14k, seeds012）**: `20260107-grad-speedup-step-baseline-mom0-resnet18-maxsteps14000-seeds012`
+  - 0.85 到達: **3/3 seeds**
+  - time-to-target@0.85: **105.1±9.2 s**
+  - steps-to-target@0.85: **6667±577**
+  - 最終 test acc（14k）: **0.8885±0.0092**
 
-現状:
-- `l0l1` 系は実装で mom=0.0 強制（回答4）
-- baseline は mom=0.9
+→ この設定（固定LR=0.1・スケジュール無し）では、baseline(mom0.9)より baseline(mom0.0) が明確に強く、  
+　以前の `l0l1-only` の優位性は **momentum交絡が支配的**だった可能性が高いです（mom0.0 baseline の方が速い）。
 
-なのでまず以下を追加で回すのが最短です（同条件で time-to-target を比較可能にする）:
+### B) GGNC “smoothing” 試行（alpha=0.2）
 
-1) **Baseline-mom0**（SGD, momentum=0.0）
-   - `max_steps=14,000`, seeds=0/1/2（既存baselineと同じ）
-   - 目的: `l0l1-only` の “速さ” が **l0l1則なのか / momentum差なのか** を分離
+- `20260107-grad-speedup-screen2000-ggnc-global-rho1.0-alpha0.2-resnet18-sgd-seed0`
+  - 2000 step 時点の test acc: **0.4621**（ターゲット未到達）
 
-2) **l0l1-only (2k)**（SGD, step_rule=l0l1）
-   - `max_steps=2,000`, seed=0（2kで早期の曲線比較）
-   - 目的: 「序盤（〜2k）で既に勝っているのか？」を把握
-
-（補足）`LinBreg` の train epoch メトリクスが壊れていたバグ（param_total が `samples` を上書き）が見つかったので修正済みです。学習曲線を正しく比較したいなら、LinBreg系は **再取得**した方が良いです（time-to-target/test acc自体は影響なし）。
-
-### B. 併用の本命：GGNC × LinBreg（“掛け算”狙い）
-
-現状:
-- GGNC global は 2k では最速級だが、14kで不安定（最終精度が落ちるseed）
-- LinBreg は 14kで堅く、再現性も良い
-
-→ 併用で狙うべき形は「GGNCをずっとかける」より **序盤だけGGNC** が本命です。
-
-追加で回したい最小セット（まずは2k→7k→14kの昇格）:
-
-3) **GGNC global (ρ=1.0, α=0.2)**（2k, seed0）
-   - 目的: α（EMA）を落として“序盤の加速”を残しつつ安定性が上がるか確認
-
-4) **GGNC global (ρ=1.0, α=0.2) + LinBreg(λ=2e-4)**（2k, seed0）
-   - 目的: 単体勝ち筋同士の掛け算が成立する兆しがあるか
-
-5) 上の(3)(4)で良ければ **7k (seeds 0/1/2)** に昇格
-   - targetはまず 0.80/0.85 あたりを置く（0.85単体だと baseline 弱いので）
-   - 目的: 「序盤だけじゃなく中盤でも wall-clock 勝ち続けるか」確認
-
-### C. EoSS/Backtracking/Anderson は当面 “保留”
-
-- EoSS: 2kで0.7未到達のため、現状は「併用候補」に上げる前に **挙動の改善/原因切り分け**が必要
-- Backtracking: 2kの最良でも baseline より遅い
-- Anderson: θのみ加速のためSGD+momentumでは不利になり得る（回答10）→ 改造するなら “状態(θ,v)版” の実装が先
-
----
-
-## 提案: 追加実験の実行順（キュー投入順）
-
-1) Baseline mom=0.0（14k, seeds012）
-2) l0l1-only（2k, seed0）
-3) GGNC global (ρ=1.0, α=0.2)（2k, seed0）
-4) GGNC global (ρ=1.0, α=0.2) + LinBreg(λ=2e-4)（2k, seed0）
-5) （勝ち筋が見えたら）7k seeds012 に昇格
+→ 現実装では `clip_alpha<1` は危険（学習が崩れる）なので、当面は `clip_alpha=1.0` 前提で検討します。

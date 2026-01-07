@@ -418,3 +418,17 @@
     - 20260106-grad-speedup-combo2000-ggnc-global-rho1.0-linbreg-l3e-3-sgd-seed0
     - 20260106-grad-speedup-combo2000-ggnc-global-rho1.0-anderson-m5-i5-d0.5-linbreg-l1.5e-3-sgd-seed0
     - 20260106-grad-speedup-combo2000-linbreg-l1.5e-3-anderson-m5-i5-d0.5-sgd-seed0
+
+- 2026-01-07: grad-speedup momentum ablation + GGNC smoothing check (done)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: done (GPU, step-based)
+  - Notes:
+    - baseline(mom=0.9) が弱かったため、mom=0.0 baseline を追加して寄与分解（結果: mom=0.0 の方が大幅に速い）。
+    - GGNC alpha=0.2（EMA）を試したが学習が崩れた（2000stepでtest acc ~0.46）。
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260107-grad-speedup-step-baseline-mom0-resnet18-maxsteps14000-seeds012
+    - 20260107-grad-speedup-screen2000-baseline-mom0-resnet18-sgd-seed0
+    - 20260107-grad-speedup-screen2000-l0l1-only-resnet18-sgd-mom0-seed0
+    - 20260107-grad-speedup-screen2000-ggnc-global-rho1.0-alpha0.2-resnet18-sgd-seed0
+    - 20260107-grad-speedup-screen2000-ggnc-global-rho1.0-alpha0.2-linbreg-l2e-4-resnet18-sgd-seed0
