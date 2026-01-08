@@ -1,5 +1,180 @@
 # Experiment Log
 
+- 2026-01-08: Muon-curv short sweep (queued)
+  - Brief: project/docs/grad-speedup/experiment-plan-20260108-muon-curv.md
+  - Status: running (GPU queue, max_steps=2000, seed=0)
+  - Notes: muon baseline refresh + muon-curv variants (beta2/update_interval/ns_iters) on resnet18/SGD. Initial muon-curv runs failed due to name shadowing; fixed in train.py. Added Muon NS transpose handling + cached eye + reduced CPU sync; rerunning with v3 run IDs. muon-curv Adam lr sweep finished (best t@0.6 ~33–34s at lr=1e-4); lower/higher lr worse. rms_scale sweep (0.1/0.2/0.3/0.4) showed no material change (~34s to target).
+  - Run IDs:
+    - 20260108-grad-speedup-screen2000-muon-sgd-seed0
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns5-i1-sgd-seed0
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p9-ns5-i1-sgd-seed0
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns3-i10-sgd-seed0
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns5-i1-sgd-seed0-v2
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p9-ns5-i1-sgd-seed0-v2
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns3-i10-sgd-seed0-v2
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns5-i1-sgd-seed0-v3
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p9-ns5-i1-sgd-seed0-v3
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns3-i10-sgd-seed0-v3
+    - 20260108-grad-speedup-screen2000-muon-sgd-seed0-v3
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns5-i1-lr0p03-sgd-seed0-v4
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns5-i1-lr0p01-sgd-seed0-v4
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns5-i1-lr0p003-sgd-seed0-v4
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p95-ns5-i1-lr0p01-sgd-seed0-v5
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p9-ns5-i1-lr0p01-sgd-seed0-v5
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns5-i1-lr0p001-sgd-seed0-v6
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns5-i1-lr0p0003-sgd-seed0-v6
+    - 20260108-grad-speedup-screen2000-muon-curv-b0p99-ns5-i1-lr0p0001-sgd-seed0-v6
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p001-b0p99-ns3-i1-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p001-b0p99-ns3-i10-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p001-b0p95-ns3-i1-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p001-b0p95-ns3-i10-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p0003-b0p99-ns3-i1-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p0003-b0p99-ns3-i10-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p0003-b0p95-ns3-i1-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p0003-b0p95-ns3-i10-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p0001-b0p99-ns3-i1-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p0001-b0p99-ns3-i10-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p0001-b0p95-ns3-i1-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-curv-grid-lr0p0001-b0p95-ns3-i10-sgd-seed0-v7
+    - 20260108-grad-speedup-screen2000-muon-sgd-seed0-v4
+    - 20260108-grad-speedup-screen2000-baseline-sgd-lr0p03-seed0-v4
+    - 20260108-grad-speedup-screen2000-baseline-sgd-lr0p01-seed0-v4
+    - 20260108-grad-speedup-screen2000-baseline-sgd-lr0p003-seed0-v4
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p001-b0p99-ns3-i1-seed0
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p001-b0p95-ns3-i1-seed0
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0003-b0p99-ns3-i1-seed0
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0003-b0p95-ns3-i1-seed0
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p001-b0p99-ns3-i1-seed0-v2
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p001-b0p95-ns3-i1-seed0-v2
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0003-b0p99-ns3-i1-seed0-v2
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0003-b0p95-ns3-i1-seed0-v2
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p001-b0p99-ns3-i1-seed0-v3
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p001-b0p95-ns3-i1-seed0-v3
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0003-b0p99-ns3-i1-seed0-v3
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0003-b0p95-ns3-i1-seed0-v3
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p003-b0p99-ns3-i1-seed0-v4
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p01-b0p99-ns3-i1-seed0-v4
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0001-b0p99-ns3-i1-seed0-v4
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p00005-b0p99-ns3-i1-seed0-v5
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p00003-b0p99-ns3-i1-seed0-v5
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p00001-b0p99-ns3-i1-seed0-v5
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0001-b0p99-ns3-i1-rms0p1-seed0-v6
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0001-b0p99-ns3-i1-rms0p2-seed0-v6
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0001-b0p99-ns3-i1-rms0p3-seed0-v6
+    - 20260108-grad-speedup-screen2000-muon-curv-adam-lr0p0001-b0p99-ns3-i1-rms0p4-seed0-v6
+
+- 2026-01-08: SuperLoRA/TRAC low-lr quick check (queued)
+  - Brief: lower-lr retry for superlora/trac base configs to test stability
+  - Status: queued after muon-curv v3 queue (GPU)
+  - Notes: same configs as 20260107-superlora-2000 / 20260107-trac-2000, lr lowered to 0.03 / 0.01.
+  - Run IDs:
+    - 20260108-superlora-2000-lr0p03
+    - 20260108-superlora-2000-lr0p01
+    - 20260108-trac-2000-lr0p03
+    - 20260108-trac-2000-lr0p01
+    - 20260108-superlora-2000-lr0p0001
+    - 20260108-trac-2000-lr0p0001
+    - 20260108-superlora-2000-fastfood-lr0p001
+    - 20260108-superlora-2000-fastfood-lr0p0001
+
+- 2026-01-08: SuperLoRA alpha / merge-interval retune (queued)
+  - Brief: revisit alpha (scaling) and merge interval with lr=0.03 (best low-lr so far).
+  - Status: queued after muon-curv v3 queue (GPU)
+  - Notes: relora_rank=4, alpha in {4,16}, merge_interval in {200,400,1000}, group=1, projection=none. Added low-lr (0.003) short-interval sweep (T=100/50/25) with alpha=16.
+  - Run IDs:
+    - 20260108-superlora-2000-lr0p03-a4-T200
+    - 20260108-superlora-2000-lr0p03-a4-T400
+    - 20260108-superlora-2000-lr0p03-a4-T1000
+    - 20260108-superlora-2000-lr0p03-a16-T200
+    - 20260108-superlora-2000-lr0p03-a16-T400
+    - 20260108-superlora-2000-lr0p03-a16-T1000
+    - 20260108-superlora-2000-lr0p003-a16-T100
+    - 20260108-superlora-2000-lr0p003-a16-T50
+    - 20260108-superlora-2000-lr0p003-a16-T25
+
+- 2026-01-07: ReLoRA r/T sweep + minimal T/ws combos (running)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: running (GPU queue, max_steps=2000, seed=0)
+  - Notes: relora scope=all, mom=0.0, lr=0.03, alpha=rank. r/T sweep uses ws=100; T/ws combos use r=16.
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p03-r8-a8-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p03-r8-a8-T1000-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p03-r32-a32-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p03-r32-a32-T1000-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p03-r16-a16-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p03-r16-a16-T200-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p03-r16-a16-T1000-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p03-r16-a16-T1000-ws400-seed0
+
+- 2026-01-07: ReLoRA + Muon (T=400, lr sweep) (running)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: running (GPU queue, max_steps=2000, seed=0)
+  - Notes: relora scope=all, r=16, alpha=16, warmstart=100, merge interval=400, muon direction; lr sweep 0.03/0.1/0.3.
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-muon-mom0-lr0p03-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-mom0-lr0p1-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-mom0-lr0p3-r16-a16-T400-ws100-seed0
+
+- 2026-01-07: ReLoRA baseline lower-lr retry (T=400) (running)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: running (GPU queue, max_steps=2000, seed=0)
+  - Notes: relora scope=all, r=16, alpha=16, warmstart=100, merge interval=400; lr lowered from 0.03.
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p01-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p003-r16-a16-T400-ws100-seed0
+
+- 2026-01-07: ReLoRA baseline SGD param sweep (momentum + weight decay) (running)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: running (GPU queue, max_steps=2000, seed=0)
+  - Notes: relora scope=all, r=16, alpha=16, warmstart=100, merge interval=400; lr fixed at 0.03; sweep momentum/weight_decay.
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p03-r16-a16-T400-ws100-wd5e-4-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0-lr0p03-r16-a16-T400-ws100-wd1e-4-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p9-lr0p03-r16-a16-T400-ws100-wd5e-4-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p9-lr0p03-r16-a16-T400-ws100-wd1e-4-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p9-lr0p03-r16-a16-T400-ws100-wd0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p8-lr0p03-r16-a16-T400-ws100-wd5e-4-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p8-lr0p03-r16-a16-T400-ws100-wd1e-4-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p8-lr0p03-r16-a16-T400-ws100-wd0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p95-lr0p03-r16-a16-T400-ws100-wd5e-4-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p95-lr0p03-r16-a16-T400-ws100-wd1e-4-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p95-lr0p03-r16-a16-T400-ws100-wd0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p99-lr0p03-r16-a16-T400-ws100-wd5e-4-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-baseline-mom0p99-lr0p03-r16-a16-T400-ws100-wd1e-4-seed0
+
+- 2026-01-07: ReLoRA + GN layerwise (ws=0) (done)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: done (GPU, max_steps=2000, seed=0)
+  - Notes: direction=gn-layerwise with ReLoRA all; ws=0 to test if LoRA warmstart is the blocker. Result: failed to learn (last test acc ~0.10).
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-gnlayerwise-ws0-mom0-lr0p03-r16-a16-T400-seed0
+
+- 2026-01-07: ReLoRA + Shampoo/SOAP (done)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: done (GPU queue, max_steps=2000, seed=0)
+  - Notes:
+    - shampoo: mean_step_time_s ~0.709; reaches 0.60 at step 1000 (time ~670.7s); last test acc ~0.706.
+    - soap: mean_step_time_s ~0.139; reaches 0.60 at step 400 (time ~49.0s); last test acc ~0.742.
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-shampoo-mom0-lr0p03-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-mom0-lr0p03-r16-a16-T400-ws100-seed0
+
+- 2026-01-07: ReLoRA + GN layerwise exact (all layers, r=1) (stopped)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: stopped (GPU queue, max_steps=2000, seed=0)
+  - Notes: run was stopped due to extreme step cost (~18s/step at step ~800; GN update ~9.3s/step). Last logged step 802 with test acc ~0.49.
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-gnlayerwise-exact-mom0-lr0p03-r1-a1-T400-ws100-seed0
+
+- 2026-01-07: ReLoRA + SOAP (update cadence) + Muon(hardswish) (queued)
+  - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
+  - Status: queued (GPU queue, max_steps=2000, seed=0)
+  - Notes: SOAP update_every sweep (5/10) to reduce cost; Muon+ReLoRA with hardswish activation.
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u5-mom0-lr0p03-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-mom0-lr0p03-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-hardswish-mom0-lr0p03-r16-a16-T400-ws100-seed0
+
 - 2026-01-07: 20260107-grad-speedup-screen2000-relora-layer34-r4-T1000-ws200-resnet18-sgd-seed0-v2 (completed)
   - Brief: project/docs/experiment-20260105-grad-speedup-cifar10.md
   - Status: completed (GPU, max_steps=2000)
@@ -442,3 +617,347 @@
     - 20260107-grad-speedup-screen2000-l0l1-only-resnet18-sgd-mom0-seed0
     - 20260107-grad-speedup-screen2000-ggnc-global-rho1.0-alpha0.2-resnet18-sgd-seed0
     - 20260107-grad-speedup-screen2000-ggnc-global-rho1.0-alpha0.2-linbreg-l2e-4-resnet18-sgd-seed0
+
+- 2026-01-07: ReLoRA + SOAP update cadence + Muon hardswish (running)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: partial (SOAP u10 + rank=1 SOAP done; Muon hardswish r16/r1 done; Muon relu r1 done)
+  - Notes:
+    - SOAP update-every=10 to reduce overhead; compare against prior SOAP cadence once complete.
+    - Muon + ReLoRA with `hardswish` activation to probe second-order friendly activation hypothesis.
+    - SOAP rank=1 underperformed (only hit 0.6 near 1800 steps); treat as likely too aggressive.
+    - Muon hardswish r16 is slower than Muon relu r16 at early targets (see summary).
+    - Muon hardswish r1 failed to reach 0.6/0.65/0.7 within 2000 steps (seed0).
+    - Muon relu r1 also failed to reach 0.6/0.65/0.7 within 2000 steps (seed0).
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-mom0-lr0p03-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-hardswish-mom0-lr0p03-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-hardswish-mom0-lr0p03-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r1-a1-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-hardswish-mom0-lr0p03-r1-a1-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-hardswish-mom0-lr0p03-r1-a1-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r1-a1-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T400-ws100-seed0
+
+- 2026-01-07: Muon + ReLoRA sweep (r/ws/T, 64 runs) (queued)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: queued (GPU queue)
+  - Notes:
+    - Sweep grid: rank {8,16,64,128} × warmstart {0,50,100,200} × merge interval T {100,200,400,800}
+    - Fixed: relu, lr=0.03, mom=0.0, max_steps=2000, eval_interval_steps=200
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T100-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T100-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T100-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T100-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T200-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T200-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T200-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T400-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T400-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T400-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T800-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T800-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T800-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r8-a8-T800-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T100-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T100-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T100-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T100-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T200-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T200-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T200-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T400-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T400-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T400-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T800-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T800-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T800-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r16-a16-T800-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T100-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T100-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T100-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T100-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T200-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T200-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T200-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T400-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T400-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T400-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T800-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T800-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T800-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r64-a64-T800-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T100-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T100-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T100-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T100-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T200-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T200-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T200-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T400-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T400-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T400-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T800-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T800-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T800-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-muon-relu-mom0-lr0p03-r128-a128-T800-ws200-seed0
+
+- 2026-01-07: SOAP + ReLoRA sweep (r/ws/T, 64 runs) (queued)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: queued (GPU queue)
+  - Notes:
+    - Sweep grid: rank {8,16,64,128} × warmstart {0,50,100,200} × merge interval T {100,200,400,800}
+    - Fixed: relu, lr=0.03, mom=0.0, max_steps=2000, eval_interval_steps=200, SOAP update_every=10
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T100-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T200-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T400-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T800-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T100-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T200-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T400-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T800-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T100-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T800-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T100-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T200-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T400-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r8-a8-T800-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T100-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T200-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T400-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T800-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T100-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T200-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T400-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T800-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T100-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T800-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T100-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T200-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T400-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r16-a16-T800-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T100-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T200-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T400-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T800-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T100-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T200-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T400-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T800-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T100-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T800-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T100-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T200-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T400-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r64-a64-T800-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T100-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T200-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T400-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T800-ws0-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T100-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T200-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T400-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T800-ws50-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T100-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T200-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T400-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T800-ws100-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T100-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T200-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T400-ws200-seed0
+    - 20260107-grad-speedup-screen2000-relora-all-soap-u10-relu-mom0-lr0p03-r128-a128-T800-ws200-seed0
+
+- 2026-01-07: TRAC / SuperLoRA 2000-step screens (with/without Muon) (queued)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: queued (GPU queue)
+  - Notes:
+    - Fixed: resnet18, relu, max_steps=2000, seed=0, eval_interval_steps=200
+    - TRAC: rank=4, alpha=1.0, merge_interval=1000, scope=all
+    - SuperLoRA: rank=4, alpha=1.0, merge_interval=1000, group=1, projection=none, no shuffle
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260107-trac-2000
+    - 20260107-trac-muon-2000
+    - 20260107-superlora-2000
+    - 20260107-superlora-muon-2000
+
+- 2026-01-07: TRAC / SuperLoRA 2000-step parameter sweep (12 runs) (queued)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: queued (GPU queue)
+  - Notes:
+    - Fixed: resnet18, relu, max_steps=2000, seed=0, eval_interval_steps=200
+    - TRAC grid: rank {2,4,8} × merge interval {200,1000} (alpha=1.0)
+    - SuperLoRA grid: rank {2,4,8} × merge interval {200,1000} (alpha=1.0, group=1, projection=none)
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260107-trac-2000-r2-T200
+    - 20260107-trac-2000-r2-T1000
+    - 20260107-trac-2000-r4-T200
+    - 20260107-trac-2000-r4-T1000
+    - 20260107-trac-2000-r8-T200
+    - 20260107-trac-2000-r8-T1000
+    - 20260107-superlora-2000-r2-T200
+    - 20260107-superlora-2000-r2-T1000
+    - 20260107-superlora-2000-r4-T200
+    - 20260107-superlora-2000-r4-T1000
+    - 20260107-superlora-2000-r8-T200
+    - 20260107-superlora-2000-r8-T1000
+
+- 2026-01-07: TRAC / SuperLoRA 2000-step high-rank sweep (12 runs) (queued)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: queued (GPU queue)
+  - Notes:
+    - Fixed: resnet18, relu, max_steps=2000, seed=0, eval_interval_steps=200
+    - TRAC grid: rank {16,64,128} × merge interval {200,1000} (alpha=1.0)
+    - SuperLoRA grid: rank {16,64,128} × merge interval {200,1000} (alpha=1.0, group=1, projection=none)
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260107-trac-2000-r16-T200
+    - 20260107-trac-2000-r16-T1000
+    - 20260107-trac-2000-r64-T200
+    - 20260107-trac-2000-r64-T1000
+    - 20260107-trac-2000-r128-T200
+    - 20260107-trac-2000-r128-T1000
+    - 20260107-superlora-2000-r16-T200
+    - 20260107-superlora-2000-r16-T1000
+    - 20260107-superlora-2000-r64-T200
+    - 20260107-superlora-2000-r64-T1000
+    - 20260107-superlora-2000-r128-T200
+    - 20260107-superlora-2000-r128-T1000
+
+- 2026-01-07: TRAC / SuperLoRA paper-aligned knobs (tt-norm / fastfood) (completed; fastfood failed)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: completed (TRAC), failed (SuperLoRA fastfood device init)
+  - Notes:
+    - TRAC uses tt-norm init; SuperLoRA uses fastfood projection.
+    - Fixed: resnet18, relu, rank=8, merge interval=1000, max_steps=2000, seed=0
+    - TRAC results: max test acc ~0.3265 (tt-norm), mean step time ~70.9ms (seed=0).
+    - Muon+TRAC results: max test acc ~0.4736, mean step time ~107.4ms (seed=0).
+    - SuperLoRA fastfood runs failed due to device init ordering (see retries below).
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260107-trac-2000-ttnorm
+    - 20260107-trac-muon-2000-ttnorm
+    - 20260107-superlora-2000-fastfood
+    - 20260107-superlora-muon-2000-fastfood
+
+- 2026-01-08: SuperLoRA fastfood retries after device init fix (failed)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: failed (device/dtype ordering still wrong)
+  - Notes:
+    - 20260107 fastfood runs failed due to device init ordering; re-queued with new run IDs.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260108-superlora-2000-fastfood
+    - 20260108-superlora-muon-2000-fastfood
+
+- 2026-01-08: SuperLoRA fastfood retry v2 (failed)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: failed (device/dtype ordering still wrong)
+  - Notes:
+    - Retry after fixing device/dtype ordering in SuperLoRAConv2d fastfood path.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260108-superlora-2000-fastfood-v2
+    - 20260108-superlora-muon-2000-fastfood-v2
+
+- 2026-01-08: SuperLoRA fastfood retry v3 (completed)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: completed (seed=0)
+  - Notes:
+    - Retry after fixing device/dtype definition in SuperLoRAConv2d fastfood path.
+    - SuperLoRA fastfood: max test acc ~0.4264, mean step time ~231.3ms.
+    - Muon+SuperLoRA fastfood: max test acc ~0.4313, mean step time ~319.1ms.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260108-superlora-2000-fastfood-v3
+    - 20260108-superlora-muon-2000-fastfood-v3
+
+- 2026-01-08: TRAC/SuperLoRA tt-norm + fastfood rank-16 follow-up (queued)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: queued (GPU queue)
+  - Notes:
+    - Rank sweep continuation to check if higher rank recovers accuracy under tt-norm/fastfood.
+    - Fixed: resnet18, relu, rank=16, merge interval=1000, max_steps=2000, seed=0.
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260108-trac-2000-ttnorm-r16
+    - 20260108-trac-muon-2000-ttnorm-r16
+    - 20260108-superlora-2000-fastfood-r16
+    - 20260108-superlora-muon-2000-fastfood-r16
+
+- 2026-01-08: TRAC tt-norm + SuperLoRA fastfood 32-condition sweep (lr/momentum/rank/T/ws/alpha)
+  - Brief: project/docs/grad-speedup/cifar10-implementation-spec.md
+  - Status: running (parallel queues)
+  - Notes:
+    - 32-condition fractional factorial over:
+      - lr {0.03, 0.1}, momentum {0.0, 0.9}, rank {8, 32}, T {200, 1000}, ws {0, 100}
+      - alpha = rank × alpha_mult, alpha_mult {1, 4} (computed by parity generator).
+    - Fixed: resnet18, relu, max_steps=2000, seed=0, eval_interval_steps=200.
+    - TRAC uses tt-norm init; SuperLoRA uses fastfood projection.
+    - Queues:
+      - project/grad-speedup/queue/queue.trac-ttnorm-sweep-20260108.txt
+      - project/grad-speedup/queue/queue.superlora-fastfood-sweep-20260108.txt
+  - Artifact location: project/runs/grad-speedup
+  - Run IDs:
+    - 20260108-trac-ttnorm-sweep-... (32 runs; see queue file)
+    - 20260108-superlora-fastfood-sweep-... (32 runs; see queue file)
+
+- 2026-01-08: SuperLoRA fastfood meaningful 32-condition plan (orthogonal design)
+  - Brief: project/docs/grad-speedup/experiment-plan-20260108-superlora-meaningful32.md
+  - Status: running (parallel queue)
+  - Notes:
+    - Orthogonal 32-run design over lr/momentum/rank/T/ws/alpha_mult to estimate main effects without a full grid.
+    - Fixed: resnet18, relu, projection=fastfood, scope=all, group=1, max_steps=2000, seed=0.
+  - Artifact location: project/runs/grad-speedup
+  - Queue file: project/grad-speedup/queue/queue.superlora-fastfood-meaningful32-20260108.txt
+  - Run IDs:
+    - 20260108-superlora-fastfood-meaningful32-01-...
+    - 20260108-superlora-fastfood-meaningful32-32-...
+
+- 2026-01-08: SuperLoRA projection diagnosis (8 runs)
+  - Brief: project/docs/grad-speedup/experiment-plan-20260108-superlora-projection-diagnosis.md
+  - Status: running (parallel queue)
+  - Notes:
+    - Isolates projection choice vs alpha scaling.
+    - Fixed: resnet18, relu, scope=all, group=1, lr=0.03, momentum=0.9, rank=32, T=1000, ws=100.
+    - Factors: projection {none, fixed, learned, fastfood} × alpha_mult {1, 4} (alpha = rank * alpha_mult).
+  - Artifact location: project/runs/grad-speedup
+  - Queue file: project/grad-speedup/queue/queue.superlora-projection-diagnosis-20260108.txt
+  - Run IDs:
+    - 20260108-superlora-projdiag-01-...
+    - 20260108-superlora-projdiag-08-...
+
+- 2026-01-08: TRAC + SuperLoRA follow-up (12 runs; targeted)
+  - Brief: project/docs/grad-speedup/experiment-plan-20260108-trac-superlora-followup12.md
+  - Status: running (parallel queues)
+  - Notes:
+    - TRAC: rank {16,64} with alpha {rank,4x}, plus T=400 and ws=200 variants.
+    - SuperLoRA: projection {none,fixed}, rank 16/32, alpha tuned (64/128), T=200/1000, ws=0/100.
+  - Artifact location: project/runs/grad-speedup
+  - Queue files:
+    - project/grad-speedup/queue/queue.trac-followup12-20260108.txt
+    - project/grad-speedup/queue/queue.superlora-followup12-20260108.txt
+  - Run IDs:
+    - 20260108-trac-followup-...
+    - 20260108-superlora-followup-...

@@ -66,6 +66,11 @@
 - Parked Layerwise GN for experiments due to compute overhead; retained as reference implementation only.
 - Dashboard now compares runs by time-to-target (selected target) rather than mean step time; targets are merged into run rows in both Streamlit and Dash UIs.
 
+2026-01-08
+- Completed muon-curv Adam lr sweep (v4/v5): best t@0.6 ~33–34s at lr=1e-4; both higher and lower lr were worse.
+- Completed muon-curv Adam rms_scale sweep (0.1/0.2/0.3/0.4): no material change in time-to-target (~34s).
+- muon-curv Adam remains slower than muon Adam baseline (t@0.6 ~8.5s), indicating overhead + slower step progress dominate.
+
 2026-01-07
 - Added GN layer selection controls (top/bottom/random-k) to gn-layerwise-exact, with per-step selection logging.
 - Runner now records GN layer metadata in configs/metrics and exposes CLI flags for selection.
@@ -82,4 +87,38 @@
   - New baseline: SGD + momentum=0.0 (14k, seeds012) reaches 0.85 on 3/3 seeds with much lower time-to-target than momentum=0.9 baseline.
   - l0l1-only (2k, seed0) is slightly slower than baseline mom=0.0 at early targets, suggesting momentum confound dominates.
 - GGNC EMA attempt: ggnc-global rho=1.0 with alpha=0.2 failed to learn (2000 step test acc ~0.46); treat alpha<1 as unsafe in current implementation.
+- Queued ReLoRA r/T sweep (r=8/32, T=200/1000, ws=100) plus minimal T/ws combos (r=16; T=200/1000; ws=100/200/400) on scope=all.
+- Queued ReLoRA + Muon sweep (T=400, r=16, ws=100) with lr {0.03, 0.1, 0.3} to test larger merge interval + muon direction.
+- Queued ReLoRA baseline retry with lower lr (0.01, 0.003) at T=400, r=16, ws=100 to test if prior lr was too high.
+- Queued ReLoRA baseline SGD param sweep (mom {0.0, 0.9} × wd {0, 1e-4, 5e-4}) at T=400, r=16, ws=100, lr=0.03.
+- Expanded SGD sweep with momentum {0.8, 0.95, 0.99} × wd {0, 1e-4, 5e-4} (subset for 0.99) at same ReLoRA settings.
+- ReLoRA + GN layerwise (ws=0) completed; failed to learn (last test acc ~0.10), so proxy gn-layerwise is not promising.
+- Removed proxy `gn-layerwise` direction from code; `gn-layerwise-exact` remains as the only GN option.
+- Queued ReLoRA + Shampoo/SOAP (direction preconditioners) at T=400, r=16, ws=100, lr=0.03.
+- Queued ReLoRA + gn-layerwise-exact with full-layer selection and rank=1 (T=400, ws=100) per PM request.
+- Fixed run_cifar10.py indentation error from removing gn-layerwise; requeue needed for SOAP + gn-layerwise-exact runs.
+- Stopped gn-layerwise-exact full-layer run due to extreme per-step cost (~18s/step around step 800). SOAP/Shampoo completed; SOAP much faster (0.6 at ~49s) than Shampoo.
 - Fixed LinBreg epoch logging bug: `samples` was accidentally overwritten by parameter count when computing sparsity stats; now `samples` remains correct and sparse param totals are tracked separately.
+- Queued SOAP update cadence (update_every=10) and Muon+ReLoRA with hardswish activation (2000-step screen).
+- Queued SOAP + ReLoRA with hardswish activation (update_every=10, 2000-step screen).
+- Trimmed rank=1 ReLoRA queue to hardswish only (SOAP/Muon) to avoid redundant relu runs.
+- Added Muon + ReLoRA rank=1 relu run to compare directly against rank=1 hardswish.
+- Queued Muon + ReLoRA rank sweep (r=8/64/128, relu) to map rank vs wall-clock tradeoff.
+- Added TRAC/SuperLoRA track to plan/critical-path and papers README; launched paper-spec + implementation tickets in parallel (sub-agents running).
+- Queued Muon + ReLoRA 64-run sweep over rank {8,16,64,128} × warmstart {0,50,100,200} × merge interval {100,200,400,800}.
+- Added TRAC/SuperLoRA paper notes (trac-notes.md, superlora-notes.md) and updated method-conformance with paper-accurate references.
+- Relaunched TRAC/SuperLoRA implementer sub-agents with scope expanded to `project/` and notes available.
+- Queued SOAP + ReLoRA 64-run sweep over rank {8,16,64,128} × warmstart {0,50,100,200} × merge interval {100,200,400,800} (update_every=10).
+- Integrated TRAC + SuperLoRA param-modes into relora/run_cifar10/README (smoke run pending).
+- Downloaded CIFAR-10 data into `project/grad-speedup/data` for local smoke runs.
+- Smoke runs on small-cnn (max_steps=1, warmup/measure=0, cpu): baseline, TRAC, SuperLoRA all complete.
+- SuperLoRA group_count>1 fails on scope=all due to conv1 in_channels=3; group_count=1 works for full-scope smoke.
+- Queued TRAC/SuperLoRA 2000-step screens (with/without Muon) on resnet18 (seed0, eval_interval_steps=200).
+- Queued TRAC/SuperLoRA 2000-step parameter sweep (12 runs: rank {2,4,8} × merge interval {200,1000} for each method).
+- Queued TRAC/SuperLoRA 2000-step high-rank sweep (12 runs: rank {16,64,128} × merge interval {200,1000} for each method).
+- Refactored TRAC adapters to a 3-factor core with shared G3A/G3B, per-layer controllers, frozen middle cores, and tt-norm option; added inner-rank and freeze-middle flags.
+- Added Fastfood projection option for SuperLoRA and exposed new CLI choices.
+- Queued TRAC tt-norm and SuperLoRA fastfood 2000-step screens (with/without Muon).
+- Fixed SuperLoRA fastfood device init bug and re-queued fastfood runs with new IDs.
+- Fixed SuperLoRA fastfood device/dtype ordering (NameError) and re-queued fastfood v2 runs.
+- Fixed SuperLoRAConv2d missing device/dtype (fastfood) and queued v3 retries.

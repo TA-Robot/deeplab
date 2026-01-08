@@ -1,6 +1,6 @@
 # Grad-Speedup PM Status
 
-Date: 2026-01-07
+Date: 2026-01-08
 Owner: PM
 
 Current state
@@ -9,6 +9,9 @@ Current state
 - Base-grid methods: current evidence suggests EoSS is not competitive in this fixed-LR/no-schedule regime; GGNC(alpha=1) and LinBreg are viable candidates for combination sweeps.
 - Direction track: Layerwise GN / GN-lite experiments were run for profiling but are currently deprioritized (compute overhead dominates).
 - Dashboard: Dash UI in place; supports time/steps/cost-to-target and learning curves, with legend table + hover-disable controls.
+- Low-rank track: TRAC/SuperLoRA paper notes drafted; ready for implementation tickets.
+- Low-rank track: TRAC/SuperLoRA param-modes integrated (smoke run pending for paper-accurate validation).
+- Muon improvement: muon-curv implementation complete; Adam lr sweep and rms_scale sweep show ~33–34s t@0.6 at best (lr=1e-4), still much slower than muon Adam baseline.
 
 Primary docs
 - CIFAR-10 spec: project/docs/grad-speedup/cifar10-implementation-spec.md
@@ -18,7 +21,9 @@ Primary docs
 - Method conformance: project/docs/grad-speedup/method-conformance.md
 
 Tickets (running)
-- None (Layerwise GN track parked after compute-cost review)
+- TRAC implementation (smoke validation pending)
+- SuperLoRA implementation (smoke validation pending)
+- Muon improvement: muon-curv implementation done; short sweep queued (queue.muon-curv-20260108.txt)
 
 Experiments
 - Legacy SOAP-focused runs are no longer used for decision-making.
@@ -30,6 +35,9 @@ Next PM actions
 - Shift dashboard comparisons to time-to-target (drop mean step time as primary).
 - Drop l0l1-only as a primary candidate unless it beats mom=0.0 baseline (current data suggests it doesn't).
 - Treat GGNC alpha<1.0 as unsafe (alpha=0.2 failed); keep alpha=1.0 until re-derived from paper.
+- Integrate TRAC/SuperLoRA as low-rank adaptation track (paper-accurate spec, then param-mode implementation + smoke runs).
+- Execute Muon improvement dev cycle (spec audit → muon-curv implementation → short sweep).
+- Decide if muon-curv Adam is worth continuing (beta2/interval) vs. de-scope based on current gap to muon Adam baseline.
 
 Risks / blockers
 - Grid generator still pending for full 72-condition sweep.
