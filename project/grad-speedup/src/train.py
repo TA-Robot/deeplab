@@ -24,6 +24,7 @@ from .relora import ReLoRAController
 
 MUON_NS_COEFFS = (3.4445, -4.7750, 2.0315)
 MUON_SCALE_MODES = ("none", "baseline", "update-norm", "adjusted-lr")
+MUON_CURV_MODES = ("auto", "left", "right")
 GN_LAYER_MODES = ("all", "topk", "bottomk", "randomk")
 
 @dataclass
@@ -60,6 +61,9 @@ class TrainMetrics:
     muon_ortho_iters_mean: Optional[float] = None
     muon_ortho_iters_p50: Optional[float] = None
     muon_ortho_iters_p90: Optional[float] = None
+    muon_curv_ns_iters_mean: Optional[float] = None
+    muon_curv_ns_iters_p50: Optional[float] = None
+    muon_curv_ns_iters_p90: Optional[float] = None
     line_search_attempts: int = 0
     line_search_accepted: int = 0
     line_search_rejected: int = 0
@@ -115,6 +119,9 @@ class StepLog:
     gn_selected_layers: Optional[list[str]] = None
     gn_update_time_ms: Optional[float] = None
     gn_apply_time_ms: Optional[float] = None
+    muon_curv_update_time_ms: Optional[float] = None
+    muon_curv_apply_time_ms: Optional[float] = None
+    muon_curv_ns_iters: Optional[float] = None
 
 
 def set_seed(seed: int, deterministic: bool = False) -> None:
@@ -418,6 +425,10 @@ def _muon_orthogonalize(update: torch.Tensor, ns_iters: int, eps: float) -> tupl
     original_shape = mat.shape
     if mat.ndim > 2:
         mat = mat.reshape(mat.shape[0], -1)
+    transposed = False
+    if mat.shape[0] > mat.shape[1]:
+        mat = mat.t()
+        transposed = True
     frob = torch.linalg.norm(mat)
     if not torch.isfinite(frob) or frob <= eps:
         return torch.zeros_like(update), 0
@@ -427,6 +438,8 @@ def _muon_orthogonalize(update: torch.Tensor, ns_iters: int, eps: float) -> tupl
         gram = x @ x.t()
         gram_x = gram @ x
         x = a * x + b * gram_x + c * (gram @ gram_x)
+    if transposed:
+        x = x.t()
     x = x.reshape(original_shape).to(original_dtype)
     return x, ns_iters
 
@@ -459,6 +472,77 @@ def _muon_scale_factor(
             size = max(rows, cols)
         return rms_scale * math.sqrt(size)
     raise ValueError(f"unsupported muon_scale_mode: {mode}")
+
+
+def _ensure_adam_state(
+    optimizer: torch.optim.Optimizer,
+    param: torch.Tensor,
+    state: Dict[str, Any],
+) -> None:
+    if not isinstance(optimizer, (torch.optim.Adam, torch.optim.AdamW)):
+        return
+    if "exp_avg" not in state:
+        state["exp_avg"] = torch.zeros_like(param, memory_format=torch.preserve_format)
+    if "exp_avg_sq" not in state:
+        state["exp_avg_sq"] = torch.zeros_like(param, memory_format=torch.preserve_format)
+    if "step" not in state:
+        state["step"] = torch.zeros((), dtype=torch.float32, device=param.device)
+    if optimizer.defaults.get("amsgrad") and "max_exp_avg_sq" not in state:
+        state["max_exp_avg_sq"] = torch.zeros_like(param, memory_format=torch.preserve_format)
+
+
+def _resolve_muon_curv_side(rows: int, cols: int, mode: str) -> tuple[str, bool]:
+    prefer_left = rows <= cols
+    if mode == "auto":
+        return ("left" if prefer_left else "right"), False
+    if mode == "left":
+        if prefer_left:
+            return "left", False
+        return "right", True
+    if mode == "right":
+        if not prefer_left:
+            return "right", False
+        return "left", True
+    raise ValueError(f"unsupported muon_curv_mode: {mode}")
+
+
+@torch.no_grad()
+def _muon_curv_inverse_sqrt(
+    matrix: torch.Tensor,
+    ns_iters: int,
+    eps: float,
+) -> tuple[Optional[torch.Tensor], int]:
+    if matrix.numel() == 0:
+        return None, 0
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise ValueError("muon-curv inverse sqrt requires a square matrix")
+    mat = matrix.detach().float()
+    dim = mat.shape[0]
+    safe_eps = max(float(eps), 1e-12)
+    key = (dim, mat.device, mat.dtype)
+    cache = getattr(_muon_curv_inverse_sqrt, "_eye_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(_muon_curv_inverse_sqrt, "_eye_cache", cache)
+    eye = cache.get(key)
+    if eye is None:
+        eye = torch.eye(dim, device=mat.device, dtype=mat.dtype)
+        cache[key] = eye
+    mat = mat + safe_eps * eye
+    frob = torch.linalg.norm(mat)
+    if not torch.isfinite(frob) or frob <= safe_eps:
+        return None, 0
+    mat = mat / frob
+    y = mat
+    z = eye
+    for _ in range(ns_iters):
+        t = 0.5 * (3.0 * eye - z @ y)
+        y = y @ t
+        z = t @ z
+    inv_sqrt = z / torch.sqrt(frob)
+    if not torch.isfinite(inv_sqrt).all():
+        return None, 0
+    return inv_sqrt.to(matrix.dtype), ns_iters
 
 
 def _functional_call(
@@ -655,7 +739,6 @@ def train_one_epoch(
     direction_beta1: float = 0.9,
     direction_damping: float = 1e-5,
     direction_update_every: int = 1,
-    direction_max_size: int = 0,
     gn_cg_iters: int = 10,
     gn_cg_tol: float = 1e-4,
     gn_layer_mode: str = "all",
@@ -675,6 +758,11 @@ def train_one_epoch(
     muon_scale_mode: str = "adjusted-lr",
     muon_rms_scale: float = 0.2,
     muon_hidden_size: int = 0,
+    muon_curv_beta2: float = 0.99,
+    muon_curv_eps: float = 1e-8,
+    muon_curv_ns_iters: int = 5,
+    muon_curv_update_interval: int = 1,
+    muon_curv_mode: str = "auto",
     clip_mode: str = "none",
     clip_rho: float = 1.0,
     clip_alpha: float = 1.0,
@@ -743,7 +831,7 @@ def train_one_epoch(
             raise ValueError("sparsity_update_interval must be > 0 when sparsity is enabled")
     if anderson_memory < 0 or anderson_interval < 0:
         raise ValueError("anderson_memory and anderson_interval must be >= 0")
-    if direction in ("shampoo", "soap", "gn-layerwise", "gn-layerwise-exact"):
+    if direction in ("shampoo", "soap", "gn-layerwise-exact"):
         if direction_damping < 0.0:
             raise ValueError("direction_damping must be >= 0")
     if direction == "shampoo":
@@ -756,13 +844,6 @@ def train_one_epoch(
             raise ValueError("direction_beta must be in [0, 1)")
         if direction_eps <= 0.0:
             raise ValueError("direction_eps must be > 0")
-    if direction == "gn-layerwise":
-        if not 0.0 <= direction_beta <= 1.0:
-            raise ValueError("direction_beta must be in [0, 1] for gn-layerwise")
-        if direction_eps <= 0.0:
-            raise ValueError("direction_eps must be > 0 for gn-layerwise")
-        if direction_max_size < 0:
-            raise ValueError("direction_max_size must be >= 0 for gn-layerwise")
     if direction == "gn-layerwise-exact":
         if gn_layer_mode not in GN_LAYER_MODES:
             raise ValueError(f"gn_layer_mode must be one of {GN_LAYER_MODES}")
@@ -799,7 +880,7 @@ def train_one_epoch(
             raise ValueError("sophia_hessian_every must be > 0")
         if sophia_hutchinson_samples <= 0:
             raise ValueError("sophia_hutchinson_samples must be > 0")
-    if direction == "muon":
+    if direction in ("muon", "muon-curv"):
         if not 0.0 <= muon_beta < 1.0:
             raise ValueError("muon_beta must be in [0, 1)")
         if muon_eps <= 0.0:
@@ -812,6 +893,15 @@ def train_one_epoch(
             raise ValueError("muon_rms_scale must be > 0 when muon scaling is enabled")
         if muon_scale_mode == "baseline" and muon_hidden_size <= 0:
             raise ValueError("muon_hidden_size must be > 0 when muon_scale_mode='baseline'")
+    if direction == "muon-curv":
+        if not 0.0 <= muon_curv_beta2 < 1.0:
+            raise ValueError("muon_curv_beta2 must be in [0, 1)")
+        if muon_curv_eps <= 0.0:
+            raise ValueError("muon_curv_eps must be > 0")
+        if muon_curv_ns_iters <= 0:
+            raise ValueError("muon_curv_ns_iters must be > 0")
+        if muon_curv_mode not in MUON_CURV_MODES:
+            raise ValueError(f"muon_curv_mode must be one of {MUON_CURV_MODES}")
     if step_rule in ("adaptive-backtracking", "sps-momentum", "sagd") and direction != "none":
         raise ValueError(f"{step_rule} requires direction='none' for paper-accurate updates")
     if step_rule in ("adaptive-backtracking", "sps-momentum", "sagd") and sparsity != "none":
@@ -891,6 +981,7 @@ def train_one_epoch(
     sophia_hessian_vals: list[float] = []
     sophia_clip_fracs: list[float] = []
     muon_ortho_iters: list[float] = []
+    muon_curv_ns_iters_list: list[float] = []
     anderson_applied = 0
     anderson_failed = 0
     precond_update_count = 0
@@ -949,6 +1040,9 @@ def train_one_epoch(
         gn_selected_count: Optional[int] = None
         gn_update_time_s_step: Optional[float] = None
         gn_apply_time_s_step: Optional[float] = None
+        muon_curv_update_time_s_step: Optional[float] = None
+        muon_curv_apply_time_s_step: Optional[float] = None
+        muon_curv_ns_iters_step: Optional[float] = None
         gn_refresh = True
         gn_cached_updates = None
         if direction == "gn-layerwise-exact":
@@ -1244,149 +1338,6 @@ def train_one_epoch(
                 scale_vals.append(float(scale.mean().item()))
             if scale_vals:
                 direction_scales.append(float(sum(scale_vals) / len(scale_vals)))
-        elif direction == "gn-layerwise":
-            # NOTE: Proxy implementation using a diagonal empirical Fisher (EMA of g^2).
-            # This is *not* the paper-accurate layerwise GN update; treat as experimental.
-            if direction_update_every <= 0:
-                direction_update_every = 1
-            update_precond = global_step % direction_update_every == 0
-            scale_vals: list[float] = []
-            with torch.no_grad():
-                for idx, param in enumerate(params):
-                    grad = param.grad
-                    if grad is None:
-                        continue
-                    name = param_names.get(id(param), f"param_{idx}")
-                    layer_stats = precond_layer_stats.get(name)
-                    if layer_stats is None:
-                        layer_stats = {
-                            "name": name,
-                            "shape": list(param.shape),
-                            "order": param.ndim,
-                            "stat_updates": 0,
-                            "precond_updates": 0,
-                            "apply_count": 0,
-                            "stat_update_time_s": 0.0,
-                            "precond_update_time_s": 0.0,
-                            "update_time_s": 0.0,
-                            "apply_time_s": 0.0,
-                            "scale_count": 0,
-                            "note": "proxy_diag_fisher",
-                        }
-                        precond_layer_stats[name] = layer_stats
-
-                    if grad.ndim <= 1:
-                        layer_stats["mode"] = "skip"
-                        continue
-
-                    state = optimizer.state[param]
-                    mode = "diag"
-                    if direction_max_size > 0 and grad.numel() > direction_max_size:
-                        mode = "scalar"
-                    layer_stats["mode"] = mode
-                    layer_stats["damping"] = float(direction_damping)
-                    layer_stats["eps"] = float(direction_eps)
-                    layer_stats["beta"] = float(direction_beta)
-                    layer_stats["update_every"] = int(direction_update_every)
-
-                    if mode == "scalar":
-                        needs_update = update_precond or "gn_scalar" not in state
-                    else:
-                        diag_state = state.get("gn_diag")
-                        needs_update = update_precond or diag_state is None or diag_state.shape != grad.shape
-
-                    if needs_update:
-                        _maybe_sync(device, precond_sync)
-                        update_start = time.perf_counter()
-                        if mode == "scalar":
-                            ggn_value = float(grad.detach().pow(2).mean().item())
-                            prev_value = state.get("gn_scalar")
-                            if prev_value is None:
-                                new_value = ggn_value
-                            else:
-                                new_value = direction_beta * float(prev_value) + (1.0 - direction_beta) * ggn_value
-                            state["gn_scalar"] = new_value
-                            layer_stats["ggn_mean"] = new_value
-                        else:
-                            ggn_est = grad.detach().pow(2)
-                            prev = state.get("gn_diag")
-                            if prev is None or prev.shape != ggn_est.shape:
-                                prev = ggn_est.clone()
-                            else:
-                                prev.mul_(direction_beta).add_(ggn_est, alpha=1.0 - direction_beta)
-                            state["gn_diag"] = prev
-                            layer_stats["ggn_mean"] = float(prev.mean().item())
-                        _maybe_sync(device, precond_sync)
-                        update_elapsed = time.perf_counter() - update_start
-                        precond_update_time_s += update_elapsed
-                        precond_update_count += 1
-                        layer_stats["stat_updates"] += 1
-                        layer_stats["precond_updates"] += 1
-                        layer_stats["stat_update_time_s"] += update_elapsed
-                        layer_stats["precond_update_time_s"] += update_elapsed
-                        layer_stats["update_time_s"] += update_elapsed
-
-                    _maybe_sync(device, precond_sync)
-                    apply_start = time.perf_counter()
-                    scale_mean = None
-                    scale_min = None
-                    scale_max = None
-                    if mode == "scalar":
-                        ggn_value = state.get("gn_scalar")
-                        if ggn_value is None:
-                            continue
-                        denom = float(ggn_value) + direction_damping
-                        if not math.isfinite(denom):
-                            grad.zero_()
-                            continue
-                        if denom <= direction_eps:
-                            denom = direction_eps
-                        scale = 1.0 / denom
-                        grad.mul_(scale)
-                        scale_mean = float(scale)
-                        scale_min = float(scale)
-                        scale_max = float(scale)
-                    else:
-                        ggn_diag = state.get("gn_diag")
-                        if ggn_diag is None:
-                            continue
-                        denom = ggn_diag + direction_damping
-                        denom = denom.clamp_min(direction_eps)
-                        if not torch.isfinite(denom).all():
-                            grad.zero_()
-                        else:
-                            scale = denom.reciprocal()
-                            grad.mul_(scale)
-                            scale_mean = float(scale.mean().item())
-                            scale_min = float(scale.min().item())
-                            scale_max = float(scale.max().item())
-                    _maybe_sync(device, precond_sync)
-                    apply_elapsed = time.perf_counter() - apply_start
-                    precond_apply_time_s += apply_elapsed
-                    precond_apply_count += 1
-                    layer_stats["apply_count"] += 1
-                    layer_stats["apply_time_s"] += apply_elapsed
-
-                    if scale_mean is not None:
-                        scale_vals.append(scale_mean)
-                        prev_count = int(layer_stats.get("scale_count", 0))
-                        prev_mean = layer_stats.get("scale_mean")
-                        new_count = prev_count + 1
-                        if prev_mean is None:
-                            layer_stats["scale_mean"] = scale_mean
-                        else:
-                            layer_stats["scale_mean"] = (prev_mean * prev_count + scale_mean) / new_count
-                        layer_stats["scale_count"] = new_count
-                        if scale_min is not None:
-                            prev_min = layer_stats.get("scale_min")
-                            if prev_min is None or scale_min < prev_min:
-                                layer_stats["scale_min"] = scale_min
-                        if scale_max is not None:
-                            prev_max = layer_stats.get("scale_max")
-                            if prev_max is None or scale_max > prev_max:
-                                layer_stats["scale_max"] = scale_max
-            if scale_vals:
-                direction_scales.append(float(sum(scale_vals) / len(scale_vals)))
         elif direction in ("shampoo", "soap"):
             if direction_update_every <= 0:
                 direction_update_every = 1
@@ -1579,6 +1530,153 @@ def train_one_epoch(
                 sophia_hessian_vals.append(float(sum(step_hessian_vals) / len(step_hessian_vals)))
             if step_clip_fracs:
                 sophia_clip_fracs.append(float(sum(step_clip_fracs) / len(step_clip_fracs)))
+        elif direction == "muon-curv":
+            if muon_curv_update_interval <= 0:
+                muon_curv_update_interval = 1
+            update_precond = global_step % muon_curv_update_interval == 0
+            step_iters: list[float] = []
+            step_curv_iters: list[float] = []
+            step_update_time_s = 0.0
+            step_apply_time_s = 0.0
+            for idx, param in enumerate(params):
+                if param.grad is None:
+                    continue
+                grad = param.grad
+                state = optimizer.state[param]
+                _ensure_adam_state(optimizer, param, state)
+                m = state.get("muon_m")
+                if m is None:
+                    m = torch.zeros_like(grad)
+                m.mul_(muon_beta).add_(grad, alpha=1.0 - muon_beta)
+                state["muon_m"] = m
+                update = m
+                if update.ndim >= 2:
+                    original_dtype = update.dtype
+                    mat = update.detach().float()
+                    original_shape = mat.shape
+                    if mat.ndim > 2:
+                        mat = mat.reshape(mat.shape[0], -1)
+                    rows, cols = mat.shape
+                    side, overridden = _resolve_muon_curv_side(rows, cols, muon_curv_mode)
+                    stat_dim = rows if side == "left" else cols
+                    name = param_names.get(id(param), f"param_{idx}")
+                    layer_stats = precond_layer_stats.get(name)
+                    if layer_stats is None:
+                        layer_stats = {
+                            "name": name,
+                            "shape": list(param.shape),
+                            "order": param.ndim,
+                            "stat_updates": 0,
+                            "precond_updates": 0,
+                            "apply_count": 0,
+                            "stat_update_time_s": 0.0,
+                            "precond_update_time_s": 0.0,
+                            "apply_time_s": 0.0,
+                            "update_time_s": 0.0,
+                            "fallbacks": 0,
+                            "mode_overrides": 0,
+                        }
+                        precond_layer_stats[name] = layer_stats
+                    if overridden:
+                        layer_stats["mode_overrides"] += 1
+                    layer_stats.update(
+                        {
+                            "method": "muon-curv",
+                            "beta2": float(muon_curv_beta2),
+                            "eps": float(muon_curv_eps),
+                            "mode": side,
+                            "mode_requested": muon_curv_mode,
+                            "update_interval": int(muon_curv_update_interval),
+                            "ns_iters": int(muon_curv_ns_iters),
+                        }
+                    )
+
+                    v = state.get("muon_curv_v")
+                    inv = state.get("muon_curv_inv")
+                    needs_update = update_precond or v is None or v.shape != (stat_dim, stat_dim)
+                    if needs_update:
+                        _maybe_sync(device, precond_sync)
+                        update_start = time.perf_counter()
+                        grad_mat = grad.detach().float()
+                        if grad_mat.ndim > 2:
+                            grad_mat = grad_mat.reshape(grad_mat.shape[0], -1)
+                        if side == "left":
+                            outer = grad_mat @ grad_mat.t()
+                        else:
+                            outer = grad_mat.t() @ grad_mat
+                        if v is None or v.shape != outer.shape:
+                            v = outer
+                        else:
+                            v.mul_(muon_curv_beta2).add_(outer, alpha=1.0 - muon_curv_beta2)
+                        state["muon_curv_v"] = v
+                        inv_new, iters = _muon_curv_inverse_sqrt(v, muon_curv_ns_iters, muon_curv_eps)
+                        if inv_new is not None:
+                            inv = inv_new
+                            state["muon_curv_inv"] = inv
+                            step_curv_iters.append(float(iters))
+                        else:
+                            if inv is None or inv.shape != v.shape:
+                                inv = None
+                                state["muon_curv_inv"] = None
+                        _maybe_sync(device, precond_sync)
+                        update_elapsed = time.perf_counter() - update_start
+                        precond_update_time_s += update_elapsed
+                        precond_update_count += 1
+                        layer_stats["stat_updates"] += 1
+                        layer_stats["precond_updates"] += 1
+                        layer_stats["stat_update_time_s"] += update_elapsed
+                        layer_stats["precond_update_time_s"] += update_elapsed
+                        layer_stats["update_time_s"] += update_elapsed
+                        step_update_time_s += update_elapsed
+
+                    fallback_used = False
+                    if inv is None or inv.shape != (stat_dim, stat_dim):
+                        whitened = mat
+                        fallback_used = True
+                    else:
+                        _maybe_sync(device, precond_sync)
+                        apply_start = time.perf_counter()
+                        if side == "left":
+                            whitened = inv @ mat
+                        else:
+                            whitened = mat @ inv
+                        _maybe_sync(device, precond_sync)
+                        apply_elapsed = time.perf_counter() - apply_start
+                        precond_apply_time_s += apply_elapsed
+                        precond_apply_count += 1
+                        layer_stats["apply_count"] += 1
+                        layer_stats["apply_time_s"] += apply_elapsed
+                        step_apply_time_s += apply_elapsed
+                        if not torch.isfinite(whitened).all():
+                            whitened = mat
+                            fallback_used = True
+
+                    if fallback_used:
+                        layer_stats["fallbacks"] += 1
+
+                    update = whitened.reshape(original_shape).to(original_dtype)
+                    update, iters = _muon_orthogonalize(update, muon_ns_iters, muon_eps)
+                    if iters:
+                        step_iters.append(float(iters))
+                    scale = _muon_scale_factor(
+                        update,
+                        param,
+                        muon_scale_mode,
+                        muon_rms_scale,
+                        muon_hidden_size,
+                        muon_eps,
+                    )
+                    update = update * scale
+                param.grad = update
+            if step_iters:
+                muon_ortho_iters.append(float(sum(step_iters) / len(step_iters)))
+            if step_curv_iters:
+                muon_curv_ns_iters_list.append(float(sum(step_curv_iters) / len(step_curv_iters)))
+                muon_curv_ns_iters_step = float(sum(step_curv_iters) / len(step_curv_iters))
+            if step_update_time_s > 0.0:
+                muon_curv_update_time_s_step = step_update_time_s
+            if step_apply_time_s > 0.0:
+                muon_curv_apply_time_s_step = step_apply_time_s
         elif direction == "muon":
             step_iters: list[float] = []
             for param in params:
@@ -1586,6 +1684,7 @@ def train_one_epoch(
                     continue
                 grad = param.grad
                 state = optimizer.state[param]
+                _ensure_adam_state(optimizer, param, state)
                 m = state.get("muon_m")
                 if m is None:
                     m = torch.zeros_like(grad)
@@ -2015,6 +2114,15 @@ def train_one_epoch(
             if direction == "gn-layerwise-exact":
                 gn_update_time_ms = float((gn_update_time_s_step or 0.0) * 1000.0)
                 gn_apply_time_ms = float((gn_apply_time_s_step or 0.0) * 1000.0)
+            muon_curv_update_time_ms = None
+            muon_curv_apply_time_ms = None
+            muon_curv_ns_iters_log = None
+            if direction == "muon-curv":
+                if muon_curv_update_time_s_step is not None:
+                    muon_curv_update_time_ms = float(muon_curv_update_time_s_step * 1000.0)
+                if muon_curv_apply_time_s_step is not None:
+                    muon_curv_apply_time_ms = float(muon_curv_apply_time_s_step * 1000.0)
+                muon_curv_ns_iters_log = muon_curv_ns_iters_step
             log_fn(
                 StepLog(
                     epoch=epoch,
@@ -2033,6 +2141,9 @@ def train_one_epoch(
                     gn_selected_layers=gn_selected_names if direction == "gn-layerwise-exact" else None,
                     gn_update_time_ms=gn_update_time_ms,
                     gn_apply_time_ms=gn_apply_time_ms,
+                    muon_curv_update_time_ms=muon_curv_update_time_ms,
+                    muon_curv_apply_time_ms=muon_curv_apply_time_ms,
+                    muon_curv_ns_iters=muon_curv_ns_iters_log,
                 )
             )
 
@@ -2083,6 +2194,10 @@ def train_one_epoch(
     muon_ortho_iters_mean = muon_ortho_iters_p50 = muon_ortho_iters_p90 = None
     if muon_ortho_iters:
         muon_ortho_iters_mean, muon_ortho_iters_p50, muon_ortho_iters_p90 = _percentiles(muon_ortho_iters)
+
+    muon_curv_ns_iters_mean = muon_curv_ns_iters_p50 = muon_curv_ns_iters_p90 = None
+    if muon_curv_ns_iters_list:
+        muon_curv_ns_iters_mean, muon_curv_ns_iters_p50, muon_curv_ns_iters_p90 = _percentiles(muon_curv_ns_iters_list)
 
     line_search_iters_mean = line_search_iters_p50 = line_search_iters_p90 = None
     if line_search_iters_list:
@@ -2171,6 +2286,9 @@ def train_one_epoch(
         muon_ortho_iters_mean=muon_ortho_iters_mean,
         muon_ortho_iters_p50=muon_ortho_iters_p50,
         muon_ortho_iters_p90=muon_ortho_iters_p90,
+        muon_curv_ns_iters_mean=muon_curv_ns_iters_mean,
+        muon_curv_ns_iters_p50=muon_curv_ns_iters_p50,
+        muon_curv_ns_iters_p90=muon_curv_ns_iters_p90,
         line_search_attempts=line_search_attempts,
         line_search_accepted=line_search_accepted,
         line_search_rejected=line_search_rejected,

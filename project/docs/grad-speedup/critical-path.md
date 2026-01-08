@@ -34,12 +34,22 @@ Lane E: Direction track (separate)
 Lane F: Reporting + dashboard
 - Dashboard must show time-to-target and learning curves without legend overlap.
 
+Lane G: Low-rank adaptation track (ReLoRA variants)
+- TRAC + SuperLoRA paper audit → param-mode implementation → smoke runs.
+- Reported separately from base grid; may inform follow-up experiments.
+
+Lane H: Muon improvement track (curvature-whitened Muon)
+- Spec from temp → method-conformance entry → implementation (muon-curv) → short sweep.
+- Reported separately from base grid; used to decide whether to replace/augment Muon.
+
 Gates
 - No experiment is accepted unless the method’s paper-accurate spec is present in method-conformance.md.
 - Direction/preconditioning methods are excluded from the base grid until validated.
+- Low-rank adaptation methods (TRAC/SuperLoRA) are excluded until paper-accurate notes are logged.
 
 Status snapshot (2026-01-07)
 - Spec alignment: done (plan/system/combination docs updated; baseline + target cadence updated).
 - Baseline: mom0 baseline adopted for the no-schedule regime; previous “wins” under mom0.9 were a confound.
 - Grid infra: queue runner active; 72-condition grid generator still pending.
 - Direction track: GN-lite experiments completed; parked after compute-cost review.
+ - Muon improvement: spec pending (temp notes captured; tickets created).

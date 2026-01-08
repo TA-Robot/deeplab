@@ -79,6 +79,7 @@ CSV columns (reports/grad-speedup-report.csv)
 Notes
 - Use --output-root runs/grad-speedup to keep artifacts isolated.
 - For multiple seeds, pass --seeds 0,1,2 and omit --seed.
+- Model activation can be set with --activation {relu,hardswish} (default: relu).
 - Step-control methods follow the paper definitions; see project/docs/grad-speedup/method-conformance.md.
 - For paper-accurate step-control runs, keep direction/clip/sparsity disabled unless the paper states otherwise.
 - GD-based step-control rules (l0l1, sps, silver, adaptive-backtracking, sagd) force SGD momentum=0.
@@ -97,11 +98,8 @@ Notes
   - --step-silver-rho (silver schedule)
   - --step-sagd-delta (SAGD Variant III exponent; default 1e-2)
 - Module B flags (optional):
-  - --direction {none,diag-precond,gn-layerwise,gn-layerwise-exact,shampoo,soap,sophia,muon}
+  - --direction {none,diag-precond,gn-layerwise-exact,shampoo,soap,sophia,muon,muon-curv}
   - diag-precond: --direction-beta, --direction-eps, --direction-update-every
-  - gn-layerwise (proxy): diagonal empirical Fisher/EMA(g^2); not paper-accurate GN
-    - --direction-beta, --direction-damping, --direction-eps, --direction-update-every
-    - --direction-max-size (0 disables scalar fallback for large layers)
   - gn-layerwise-exact: per-layer GGN + CG solve + Armijo line search
     - --direction-damping (Tikhonov), --gn-cg-iters, --gn-cg-tol
     - --gn-layer-mode {all,topk,bottomk,randomk}, --gn-layer-k, --gn-layer-random-every-step/--no-gn-layer-random-every-step
@@ -114,6 +112,7 @@ Notes
   - sophia: --sophia-beta1, --sophia-beta2, --sophia-gamma, --sophia-eps, --sophia-hessian-every, --sophia-hutchinson-samples
   - muon: --muon-beta, --muon-eps, --muon-ns-iters, --muon-scale-mode {none,baseline,update-norm,adjusted-lr}, --muon-rms-scale, --muon-hidden-size
   - muon-hidden-size is required when using --muon-scale-mode baseline (sqrt(H) scaling).
+  - muon-curv: muon flags plus --muon-curv-beta2, --muon-curv-eps, --muon-curv-ns-iters, --muon-curv-update-interval, --muon-curv-mode {auto,left,right}
 - Module D flags (optional):
   - --clip-mode {none,ggnc,ggnc-global,ggnc-layerwise,global,layerwise}
   - --clip-rho (GGNC rho; tau = min(1, rho / ||d||_*))
@@ -125,18 +124,30 @@ Notes
   - --anderson-memory, --anderson-interval, --anderson-damping, --anderson-lambda
   - anderson_damping is the Algorithm 1 mixing parameter beta_t; anderson_lambda is ridge regularization
 - Parametrization flags (optional):
-  - --param-mode {none,relora}
+  - --param-mode {none,relora,trac,superlora}
   - ReLoRA (arXiv:2307.05695): periodically merge/reset low-rank adapters to reduce the number of trained parameters (and optimizer state).
     - --relora-scope {linear,resnet-layer4,resnet-layer3-4,all}
     - --relora-rank, --relora-alpha, --relora-dropout
     - --relora-init {kaiming,qr} (qr = ReLoQRa-style initialization via QR decomposition)
     - --relora-merge-interval, --relora-warmstart-steps
     - --relora-reset-optimizer/--no-relora-reset-optimizer, --relora-prune-optimizer-fraction
+  - TRAC (OpenReview tz5yPWZp9W): shared-core low-rank adapters (experimental; paper-accurate validation pending).
+    - --trac-scope {linear,resnet-layer4,resnet-layer3-4,all}
+    - --trac-rank, --trac-alpha, --trac-dropout
+    - --trac-init {kaiming,qr,tt-norm}, --trac-core-init {identity,kaiming}
+    - --trac-inner-rank (defaults to rank//2 when 0), --trac-freeze-middle/--no-trac-freeze-middle
+    - --trac-merge-interval, --trac-warmstart-steps
+    - --trac-reset-optimizer/--no-trac-reset-optimizer, --trac-prune-optimizer-fraction
+  - SuperLoRA (BMVC 2024): group-wise low-rank adapters with optional projection/shuffle (experimental; paper-accurate validation pending).
+    - Uses ReLoRA schedule knobs: --relora-merge-interval, --relora-warmstart-steps
+    - --superlora-group, --superlora-projection {none,fixed,learned,fastfood}
+    - --superlora-shuffle/--no-superlora-shuffle, --superlora-shuffle-interval
+    - group_count must divide in/out channels; for scope=all on CIFAR ResNet/SmallCNN, group_count=1 is required (conv1 has 3 input channels).
 - Diagnostics:
   - --diagnostics (enables data-wait and max-memory stats)
 - Method metrics:
   - step_size_* and line_search_* report step-control stats when enabled
-  - clip_coef_* are GGNC tau stats; sophia_hessian_*, sophia_clip_frac_*, muon_ortho_iters_*, precond_* appear in metrics.jsonl when enabled
+  - clip_coef_* are GGNC tau stats; sophia_hessian_*, sophia_clip_frac_*, muon_ortho_iters_*, muon_curv_ns_iters_*, precond_* appear in metrics.jsonl when enabled
   - gn_update_time_s/gn_apply_time_s and gn_layer_stats appear for gn-layerwise-exact; step logs include gn_selected_count/gn_selected_layers and gn_update_time_ms/gn_apply_time_ms
   - precond_layer_stats includes per-layer update/apply counts plus timing fields (stat_update_time_s, precond_update_time_s, apply_time_s).
   - modules.step_control.name, modules.step_control.l0, modules.step_control.l1, modules.step_control.fstar
@@ -151,6 +162,8 @@ Notes
   - modules.direction.sophia_eps, modules.direction.sophia_hessian_every, modules.direction.sophia_hutchinson_samples
   - modules.direction.muon_beta, modules.direction.muon_eps, modules.direction.muon_ns_iters
   - modules.direction.muon_scale_mode, modules.direction.muon_rms_scale, modules.direction.muon_hidden_size
+  - modules.direction.muon_curv_beta2, modules.direction.muon_curv_eps, modules.direction.muon_curv_ns_iters
+  - modules.direction.muon_curv_update_interval, modules.direction.muon_curv_mode
   - modules.sparsity.name, modules.sparsity.lambda, modules.sparsity.update_interval
 - Sparsity metrics (metrics.jsonl):
   - sparsity_fraction, dense_flops, effective_flops, sparsity_updates, sparsity_update_rate

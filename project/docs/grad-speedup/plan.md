@@ -10,6 +10,7 @@ Scope
 - No dependency on other experiments or shared code.
 - Primary focus: algorithmic modules (step control, geometry/clip, outer accel, sparsity).
 - Direction/preconditioning (SOAP/GN/etc) is a separate track, not part of the base 72 grid.
+- Low-rank adaptation (ReLoRA + TRAC/SuperLoRA) is a separate track; evaluated against the same time-to-target metrics.
 
 Operating constraints
 - FP32 only, fixed augmentation, fixed batch size (128) unless explicitly in a new series.
@@ -26,6 +27,8 @@ Phase 0: Spec lock + alignment (PM)
 Phase 1: Paper audit and conformance matrix (continuous)
 - Core methods (base grid): EoSS step control, Adaptive Backtracking, GGNC, Anderson, LinBreg.
 - Track B (direction/preconditioning): Layerwise GN (priority), SOAP (fast check), Full GN (upper bound).
+- Track C (low-rank adaptation): ReLoRA variants (TRAC, SuperLoRA) paper audit + conformance.
+- Track D (Muon improvement): ASGO/curvature-whitened Muon spec from temp → method-conformance update.
 - Output: method-conformance entries with equations, hyperparameters, and constraints.
 
 Phase 2: Implementation tickets (parallel)
@@ -34,6 +37,8 @@ Phase 2: Implementation tickets (parallel)
 - Outer accel: validate Anderson stability/telemetry.
 - Sparsity: validate LinBreg path + FLOPs accounting.
 - Direction track: implement Layerwise GN and SOAP fast-check harness.
+- Low-rank track: implement TRAC + SuperLoRA param-modes (paper-accurate), integrate with ReLoRA merge/reset.
+- Muon improvement track: implement muon-curv (NS inverse sqrt + whitening + Muon orthogonalization) with CLI args + logging.
 
 Phase 3: Experiment infrastructure
 - Generate 72-condition config grid (SGD/AdamW × step_control × clip × anderson × sparsity).
@@ -46,6 +51,7 @@ Phase 4: Execution (step-based)
 - 72-condition sweep (1 seed, max_steps=7000) for ranking.
 - Promote top-10 (max_steps=14000, seeds 0/1/2) for final comparison.
 - Direction track (Layerwise GN / SOAP fast check) runs in parallel, but reported separately.
+- Low-rank track (ReLoRA/TRAC/SuperLoRA) runs in parallel, reported separately from base grid.
 
 Phase 5: Reporting + dashboard
 - Update experiment-log.md with run IDs + status.

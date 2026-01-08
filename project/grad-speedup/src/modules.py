@@ -4,12 +4,12 @@ SUPPORTED_STEP_RULES = ("none", "eoss", "l0l1", "sps", "sps-momentum", "adaptive
 SUPPORTED_DIRECTIONS = (
     "none",
     "diag-precond",
-    "gn-layerwise",
     "gn-layerwise-exact",
     "shampoo",
     "soap",
     "sophia",
     "muon",
+    "muon-curv",
 )
 SUPPORTED_CLIP_MODES = (
     "none",

@@ -41,6 +41,58 @@
 
 ---
 
+## 6. ReLoRA / 方向系の最新まとめ（2k・seed=0）
+
+対象は `max_steps=2,000` / `eval_interval_steps=200`。  
+以下は **time-to-target（壁時計）** と **最終test acc** を軸に比較したもの。
+
+### 6.1 主要結果（代表ラン）
+
+| ラン | mean_step_time_s | 0.60到達 (step / sec) | 0.70到達 (step / sec) | 最終test acc |
+|---|---:|---:|---:|---:|
+| ReLoRA all baseline (T50, ws1000) | 0.0221 | 1200 / 28.20 | 未到達 | 0.6256 |
+| ReLoRA all baseline (T1000, ws1000) | 0.0210 | 1200 / 26.37 | 未到達 | 0.6406 |
+| ReLoRA all + Muon (T400, ws100, r16) | 0.0460 | 600 / 29.68 | 1200 / 61.69 | 0.7285 |
+| ReLoRA all + SOAP (T400, ws100, r16) | 0.1388 | 400 / 48.98 | 1000 / 141.99 | 0.7423 |
+| ReLoRA all + Shampoo (T400, ws100, r16) | 0.7089 | 1000 / 670.65 | 2000 / 1413.93 | 0.7059 |
+| ReLoRA layer4 r1 (T1000, ws200) | 0.0205 | 1000 / 26.73 | 1800 / 47.97 | 0.7343 |
+| ReLoRA layer4 r2 (T1000, ws200) | 0.0191 | 1200 / 28.65 | 2000 / 47.58 | 0.7124 |
+| ReLoQRa (T200, ws100) | 0.0282 | 未到達 | 未到達 | 0.10 |
+
+（出典: `project/runs/grad-speedup/*/summary.json`）
+
+### 6.2 考察（暫定）
+
+1. **ReLoRA all は “warmstartが大きくないと立ち上がらない”**
+   - ws=1000 で初めて 0.60 到達。ws=100 では momentum/weight_decay を振っても 0.6 未到達。
+   - T の効果より **warmstartの影響が支配的**に見える。
+
+2. **Muon は壁時計で強い（SOAPより速い）**
+   - SOAPは精度は伸びるが step_time が大きく、0.60/0.70 到達時間は Muon に負ける。
+   - Muon + ReLoRA (T400) は **time-to-target 最速クラス**。
+
+3. **Layer4-only ReLoRA (r=1) が優秀**
+   - 0.60 到達は Muon と同等、0.70 到達は Muon より速い。
+   - ただし “ReLoRA all” と比較して **スコープ縮小が大きく効いている**。
+
+4. **Shampoo は重すぎる**
+   - 0.60 まで 10分超、0.70 は 20分超。壁時計指標では不利。
+
+5. **ReLoQRa は現条件では失敗**
+   - QR init でも学習が進まず（acc ~0.1）。
+
+6. **gn-layerwise-exact（全層） は実運用不可**
+   - step あたり 18s 前後。2000 step で半日規模のため停止。
+
+### 6.3 次の検討候補（優先度順）
+
+- **Layer4-only × Muon の併用**（time-to-target 最速が期待）
+- **ReLoRA all の warmstart 依存性の切り分け**（ws=200/400/800 の短い系列）
+- **SOAP は step_time を抑える設定（update_everyの間引き）で再評価**
+
+
+---
+
 ## 2. 2k スクリーニング結果（seed=0, time-to-target）
 
 ### 2.1 単体（代表）

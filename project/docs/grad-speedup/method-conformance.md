@@ -20,6 +20,8 @@ Table
 | Direction / preconditioning | K-FAC | arXiv:1503.05671 | audited | optional | Fisher block approx |
 | Direction / preconditioning | Sophia | arXiv:2305.14342 | audited | optional | Algorithm 3 + Eq. (6), pages 3 & 6 |
 | Direction / preconditioning | Muon (scalable) | arXiv:2502.16982 | audited | optional | Eq. (1)–(2) + scalable variants Eq. (3)–(7), pages 2–4 |
+| Direction / preconditioning | ASGO | TBD (temp notes) | pending | optional | One-sided inverse-sqrt preconditioning via Newton-Schulz; paper TBD |
+| Direction / preconditioning | Muon-curvature (Curvature-Whitened Muon) | TBD (temp notes) | pending | optional | Curvature whitening + Muon orthogonalization; paper TBD |
 | Direction / preconditioning | MARS | arXiv:2411.10438 | audited | optional | Variance-reduced preconditioning |
 | Direction / preconditioning | Adan | arXiv:2208.06677 | audited | optional | Momentum variant |
 | Direction / preconditioning | AdEMAMix | arXiv:2409.03137 | audited | optional | Mixed EMA |
@@ -51,6 +53,8 @@ Table
 | Compression | Deep Gradient Compression | arXiv:1712.01887 | audited | optional | Gradient sparsification |
 | Parametrization | ReLoRA | arXiv:2307.05695 | implemented | optional | Periodic merge/reset of LoRA adapters; paper applies to linear layers. Our conv support is experimental. |
 | Parametrization | ReLoQRa (QR-init) | Amazon Science 2025 | implemented | optional | QR-based LoRA reinit after merge (enable with `--relora-init qr`). |
+| Parametrization | TRAC (Tensor-Train LoRA, shared core) | OpenReview tz5yPWZp9W | audited | optional | TT factorization of LoRA A/B (Eq. 5–6) with frozen middle core, shared final core, and per-layer controllers (Eq. 8). |
+| Parametrization | SuperLoRA | BMVC 2024 Paper 566 | audited | optional | Group-wise projection + tensor core update (Eq. 4), with optional shuffle and Fastfood projection. |
 | Scaling / batch | Critical Batch Size (CBS) | arXiv:1812.06162 | audited | optional | GNS / CBS estimation |
 | Scaling / batch | Super-Convergence / 1cycle | arXiv:1708.07120 | audited | optional | Aggressive LR schedule |
 | Scaling / batch | Large-batch scaling notes | arXiv:1708.03888; arXiv:1904.00962 | audited | optional | LARS/LAMB context |
@@ -88,8 +92,7 @@ Gauss-Newton (full) + Layerwise GN (arXiv:2510.09378)
 - Layerwise Gauss-Newton (Section 6.3, pages 8–9):
   - Applies per-layer Taylor expansion (block-diagonal / layerwise approximation).
 - Implementation note:
-  - Any “gn-layerwise” module must explicitly tie to this per-layer GN approximation.
-  - Simple diagonal Fisher / EMA(g^2) is a *proxy* and should be labeled as not paper-accurate unless justified.
+  - The proxy “gn-layerwise” (diag Fisher / EMA(g^2)) has been removed; only `gn-layerwise-exact` remains.
   - gn-layerwise-exact supports optional layer subsampling (top/bottom/random-k) for profiling; this is experimental and not paper-accurate.
   - GN update intervals (reusing cached GN updates between refreshes) are experimental and not paper-accurate.
 
@@ -180,6 +183,29 @@ Muon (scalable) (arXiv:2502.16982)
 - Scalable variants (Eq. 3–7): add weight decay and update RMS scaling; see pages 3–4.
 - Hyperparameters: μ, η, N (NS steps), λ, scaling mode.
 
+ASGO (temp notes; paper TBD)
+- Definition (per layer): let gradient be G in R^{m x n}. Choose side = right if n <= m, else left.
+  - Right side: V = G^T G, preconditioner P = (V + eps I)^{-1/2}.
+  - Left side: V = G G^T, preconditioner P = (V + eps I)^{-1/2}.
+- Preconditioned gradient:
+  - Right side: G_pre = G P.
+  - Left side: G_pre = P G.
+- Inverse-sqrt approximation: compute P with a Newton-Schulz iteration on a normalized V.
+- Hyperparameters: eps (damping), ns_iters, ns_coeffs (a,b,c), side (left/right/auto),
+  update interval, normalization (trace or Frobenius), optional EMA for V.
+- Approximation constraints: one-sided (min(m,n) matrix only), per-layer 2D reshape for conv weights.
+
+Muon-curvature (Curvature-Whitened Muon) (temp notes; paper TBD)
+- Compose ASGO-style whitening with Muon orthogonalization.
+- Steps (per layer):
+  - Compute G_pre via ASGO (one-sided inverse-sqrt preconditioning).
+  - Orthogonalize: O = (G_pre G_pre^T)^{-1/2} G_pre (or right-side variant if m < n).
+  - Update: W <- W - eta * O (with Muon RMS scaling if enabled).
+- Relationship to existing methods:
+  - If P = I or ns_iters = 0, reduces to Muon.
+  - If Muon orthogonalization is disabled, reduces to ASGO.
+- Hyperparameters: ASGO preconditioner params + Muon params (ns_iters, rms_scale, scaling mode).
+
 Silver step sizes (PMLR 247, 2024)
 - eta_t = eta * (1 + rho^{v(t)-1}), v(t) = max{v: t ≥ F_v}, F_0=0, F_1=1.
 
@@ -195,3 +221,5 @@ Pending method specs (awaiting primary paper extraction)
 - BSPPA (TBD)
 - Parametrization / implicit preconditioning (TBD)
 - Generalized smoothness / H-smooth (TBD)
+- ASGO (temp notes; paper TBD)
+- Muon-curvature / Curvature-Whitened Muon (temp notes; paper TBD)

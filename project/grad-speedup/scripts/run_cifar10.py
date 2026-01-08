@@ -22,22 +22,27 @@ sys.path.insert(0, str(GS_ROOT))
 
 from src.data import DataConfig, get_cifar10_loaders  # noqa: E402
 from src.models import ModelConfig, build_model  # noqa: E402
-from src.relora import ReLoRAController  # noqa: E402
+from src.relora import ReLoRAController, TracController  # noqa: E402
 from src.train import EvalMetrics, StepLog, TrainMetrics, evaluate, set_seed, train_one_epoch  # noqa: E402
 
 
 MODEL_CHOICES = ("resnet18", "small-cnn")
 OPT_CHOICES = ("sgd", "adam")
 MUON_SCALE_CHOICES = ("none", "baseline", "update-norm", "adjusted-lr")
+MUON_CURV_MODES = ("auto", "left", "right")
 GN_LAYER_CHOICES = ("all", "topk", "bottomk", "randomk")
-PARAM_MODE_CHOICES = ("none", "relora")
+PARAM_MODE_CHOICES = ("none", "relora", "trac", "superlora")
 RELORA_SCOPE_CHOICES = ("linear", "resnet-layer4", "resnet-layer3-4", "all")
 RELORA_INIT_CHOICES = ("kaiming", "qr")
+TRAC_INIT_CHOICES = ("kaiming", "qr", "tt-norm")
+TRAC_CORE_INIT_CHOICES = ("identity", "kaiming")
+SUPERLORA_PROJECTION_CHOICES = ("none", "fixed", "learned", "fastfood")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Grad-speedup CIFAR-10 runner")
     parser.add_argument("--model", choices=MODEL_CHOICES, default="resnet18")
+    parser.add_argument("--activation", choices=("relu", "hardswish"), default="relu")
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--max-steps", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=128)
@@ -91,6 +96,53 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Optional warm-start steps with full training before switching to ReLoRA.",
     )
+    parser.add_argument("--trac-rank", type=int, default=4)
+    parser.add_argument("--trac-alpha", type=float, default=1.0)
+    parser.add_argument("--trac-dropout", type=float, default=0.0)
+    parser.add_argument("--trac-scope", choices=RELORA_SCOPE_CHOICES, default="linear")
+    parser.add_argument("--trac-init", choices=TRAC_INIT_CHOICES, default="kaiming")
+    parser.add_argument("--trac-core-init", choices=TRAC_CORE_INIT_CHOICES, default="identity")
+    parser.add_argument("--trac-inner-rank", type=int, default=0)
+    parser.add_argument(
+        "--trac-freeze-middle",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Freeze TRAC middle cores (G2) to match the paper defaults.",
+    )
+    parser.add_argument("--trac-merge-interval", type=int, default=1000)
+    parser.add_argument(
+        "--trac-reset-optimizer",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Reset optimizer state for TRAC params at each merge (ReLoRA-style).",
+    )
+    parser.add_argument(
+        "--trac-prune-optimizer-fraction",
+        type=float,
+        default=0.0,
+        help="Magnitude-prune this fraction of optimizer state tensors after each merge (ignored when reset_optimizer is on).",
+    )
+    parser.add_argument("--trac-train-bias", action="store_true", help="Keep base-layer bias trainable under TRAC.")
+    parser.add_argument(
+        "--trac-warmstart-steps",
+        type=int,
+        default=0,
+        help="Optional warm-start steps with full training before switching to TRAC.",
+    )
+    parser.add_argument("--superlora-group", type=int, default=1)
+    parser.add_argument("--superlora-projection", choices=SUPERLORA_PROJECTION_CHOICES, default="none")
+    parser.add_argument(
+        "--superlora-shuffle",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable SuperLoRA group shuffling.",
+    )
+    parser.add_argument(
+        "--superlora-shuffle-interval",
+        type=int,
+        default=0,
+        help="Shuffle group assignments every N steps (defaults to merge interval when enabled).",
+    )
     parser.add_argument(
         "--step-rule",
         choices=("none", "eoss", "l0l1", "sps", "sps-momentum", "adaptive-backtracking", "sagd", "silver"),
@@ -115,7 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--step-sagd-delta", type=float, default=1e-2)
     parser.add_argument(
         "--direction",
-        choices=("none", "diag-precond", "gn-layerwise", "gn-layerwise-exact", "shampoo", "soap", "sophia", "muon"),
+        choices=("none", "diag-precond", "gn-layerwise-exact", "shampoo", "soap", "sophia", "muon", "muon-curv"),
         default="none",
     )
     parser.add_argument("--direction-beta", type=float, default=0.9)
@@ -123,7 +175,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--direction-eps", type=float, default=1e-8)
     parser.add_argument("--direction-damping", type=float, default=1e-5)
     parser.add_argument("--direction-update-every", type=int, default=1)
-    parser.add_argument("--direction-max-size", type=int, default=0)
     parser.add_argument("--gn-cg-iters", type=int, default=10)
     parser.add_argument("--gn-cg-tol", type=float, default=1e-4)
     parser.add_argument("--gn-layer-mode", choices=GN_LAYER_CHOICES, default="all")
@@ -147,6 +198,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--muon-scale-mode", choices=MUON_SCALE_CHOICES, default="adjusted-lr")
     parser.add_argument("--muon-rms-scale", type=float, default=0.2)
     parser.add_argument("--muon-hidden-size", type=int, default=0)
+    parser.add_argument("--muon-curv-beta2", type=float, default=0.99)
+    parser.add_argument("--muon-curv-eps", type=float, default=1e-8)
+    parser.add_argument("--muon-curv-ns-iters", type=int, default=5)
+    parser.add_argument("--muon-curv-update-interval", type=int, default=1)
+    parser.add_argument("--muon-curv-mode", choices=MUON_CURV_MODES, default="auto")
     parser.add_argument(
         "--clip-mode",
         choices=("none", "ggnc", "ggnc-global", "ggnc-layerwise", "global", "layerwise"),
@@ -225,6 +281,8 @@ def apply_config(args: argparse.Namespace, defaults: Dict[str, Any], config: Dic
 
     if model and "name" in model:
         _set_if_default(args, defaults, "model", model["name"])
+    if model and "activation" in model:
+        _set_if_default(args, defaults, "activation", model["activation"])
 
     if optimizer:
         if "type" in optimizer:
@@ -322,8 +380,6 @@ def apply_config(args: argparse.Namespace, defaults: Dict[str, Any], config: Dic
             _set_if_default(args, defaults, "direction_damping", direction["damping"])
         if "update_every" in direction:
             _set_if_default(args, defaults, "direction_update_every", direction["update_every"])
-        if "max_size" in direction:
-            _set_if_default(args, defaults, "direction_max_size", direction["max_size"])
         if "gn_cg_iters" in direction:
             _set_if_default(args, defaults, "gn_cg_iters", direction["gn_cg_iters"])
         if "gn_cg_tol" in direction:
@@ -362,6 +418,16 @@ def apply_config(args: argparse.Namespace, defaults: Dict[str, Any], config: Dic
             _set_if_default(args, defaults, "muon_rms_scale", direction["muon_rms_scale"])
         if "muon_hidden_size" in direction:
             _set_if_default(args, defaults, "muon_hidden_size", direction["muon_hidden_size"])
+        if "muon_curv_beta2" in direction:
+            _set_if_default(args, defaults, "muon_curv_beta2", direction["muon_curv_beta2"])
+        if "muon_curv_eps" in direction:
+            _set_if_default(args, defaults, "muon_curv_eps", direction["muon_curv_eps"])
+        if "muon_curv_ns_iters" in direction:
+            _set_if_default(args, defaults, "muon_curv_ns_iters", direction["muon_curv_ns_iters"])
+        if "muon_curv_update_interval" in direction:
+            _set_if_default(args, defaults, "muon_curv_update_interval", direction["muon_curv_update_interval"])
+        if "muon_curv_mode" in direction:
+            _set_if_default(args, defaults, "muon_curv_mode", direction["muon_curv_mode"])
 
     clip = modules.get("clip", {})
     if clip:
@@ -460,6 +526,9 @@ def log_step(path: Path, log: StepLog) -> None:
         "gn_selected_layers": log.gn_selected_layers,
         "gn_update_time_ms": log.gn_update_time_ms,
         "gn_apply_time_ms": log.gn_apply_time_ms,
+        "muon_curv_update_time_ms": log.muon_curv_update_time_ms,
+        "muon_curv_apply_time_ms": log.muon_curv_apply_time_ms,
+        "muon_curv_ns_iters": log.muon_curv_ns_iters,
     }
     append_jsonl(path, payload)
 
@@ -504,6 +573,9 @@ def log_epoch(path: Path, split: str, epoch: int, global_step: int, metrics: Tra
                 "muon_ortho_iters_mean": metrics.muon_ortho_iters_mean,
                 "muon_ortho_iters_p50": metrics.muon_ortho_iters_p50,
                 "muon_ortho_iters_p90": metrics.muon_ortho_iters_p90,
+                "muon_curv_ns_iters_mean": metrics.muon_curv_ns_iters_mean,
+                "muon_curv_ns_iters_p50": metrics.muon_curv_ns_iters_p50,
+                "muon_curv_ns_iters_p90": metrics.muon_curv_ns_iters_p90,
                 "line_search_attempts": metrics.line_search_attempts,
                 "line_search_accepted": metrics.line_search_accepted,
                 "line_search_rejected": metrics.line_search_rejected,
@@ -593,6 +665,9 @@ def main() -> int:
     seeds = parse_seeds(args)
     targets = parse_targets(args.target_acc)
     run_id = args.run_id or run_id_default(args)
+    superlora_shuffle_interval = args.superlora_shuffle_interval
+    if args.superlora_shuffle and superlora_shuffle_interval <= 0:
+        superlora_shuffle_interval = args.relora_merge_interval
 
     output_root = (PROJECT_ROOT / args.output_root).resolve()
     run_root = output_root / run_id
@@ -614,6 +689,7 @@ def main() -> int:
         "run_id": run_id,
         "config_path": args.config or None,
         "model": args.model,
+        "activation": args.activation,
         "optimizer": args.optimizer,
         "epochs": args.epochs,
         "max_steps": args.max_steps,
@@ -649,6 +725,23 @@ def main() -> int:
         "relora_prune_optimizer_fraction": args.relora_prune_optimizer_fraction,
         "relora_train_bias": args.relora_train_bias,
         "relora_warmstart_steps": args.relora_warmstart_steps,
+        "trac_rank": args.trac_rank,
+        "trac_alpha": args.trac_alpha,
+        "trac_dropout": args.trac_dropout,
+        "trac_scope": args.trac_scope,
+        "trac_init": args.trac_init,
+        "trac_core_init": args.trac_core_init,
+        "trac_inner_rank": args.trac_inner_rank,
+        "trac_freeze_middle": args.trac_freeze_middle,
+        "trac_merge_interval": args.trac_merge_interval,
+        "trac_reset_optimizer": args.trac_reset_optimizer,
+        "trac_prune_optimizer_fraction": args.trac_prune_optimizer_fraction,
+        "trac_train_bias": args.trac_train_bias,
+        "trac_warmstart_steps": args.trac_warmstart_steps,
+        "superlora_group": args.superlora_group,
+        "superlora_projection": args.superlora_projection,
+        "superlora_shuffle": args.superlora_shuffle,
+        "superlora_shuffle_interval": superlora_shuffle_interval,
         "step_rule": args.step_rule,
         "step_eoss_beta": args.step_eoss_beta,
         "step_eoss_ema": args.step_eoss_ema,
@@ -672,7 +765,6 @@ def main() -> int:
         "direction_eps": args.direction_eps,
         "direction_damping": args.direction_damping,
         "direction_update_every": args.direction_update_every,
-        "direction_max_size": args.direction_max_size,
         "gn_cg_iters": args.gn_cg_iters,
         "gn_cg_tol": args.gn_cg_tol,
         "gn_layer_mode": args.gn_layer_mode,
@@ -691,6 +783,11 @@ def main() -> int:
         "muon_scale_mode": args.muon_scale_mode,
         "muon_rms_scale": args.muon_rms_scale,
         "muon_hidden_size": args.muon_hidden_size,
+        "muon_curv_beta2": args.muon_curv_beta2,
+        "muon_curv_eps": args.muon_curv_eps,
+        "muon_curv_ns_iters": args.muon_curv_ns_iters,
+        "muon_curv_update_interval": args.muon_curv_update_interval,
+        "muon_curv_mode": args.muon_curv_mode,
         "clip_mode": args.clip_mode,
         "clip_rho": args.clip_rho,
         "clip_alpha": args.clip_alpha,
@@ -710,6 +807,7 @@ def main() -> int:
     aggregated: Dict[str, Any] = {
         "run_id": run_id,
         "model": args.model,
+        "activation": args.activation,
         "optimizer": args.optimizer,
         "seeds": seeds,
         "targets": targets,
@@ -733,9 +831,12 @@ def main() -> int:
         )
         train_loader, val_loader, test_loader = get_cifar10_loaders(data_config)
 
-        model = build_model(ModelConfig(name=args.model))
+        model = build_model(ModelConfig(name=args.model, activation=args.activation))
         model = model.to(device)
         relora_controller: Optional[ReLoRAController] = None
+        trac_controller: Optional[TracController] = None
+        is_relora_like = args.param_mode in ("relora", "superlora")
+        is_trac = args.param_mode == "trac"
         optimizer = build_optimizer(args, model)
 
         global_step = 0
@@ -779,8 +880,10 @@ def main() -> int:
 
         def _warmstart_on_step_end(step: int, step_epoch: int, step_in_epoch: int) -> bool:
             stop = _on_step_end(step, step_epoch, step_in_epoch)
-            if args.param_mode == "relora" and args.relora_warmstart_steps > 0:
+            if is_relora_like and args.relora_warmstart_steps > 0:
                 return stop or step >= args.relora_warmstart_steps
+            if is_trac and args.trac_warmstart_steps > 0:
+                return stop or step >= args.trac_warmstart_steps
             return stop
 
         for epoch in range(1, args.epochs + 1):
@@ -792,22 +895,60 @@ def main() -> int:
             def _log_fn(step_log: StepLog) -> None:
                 log_step(metrics_path, step_log)
 
-            if args.param_mode == "relora" and relora_controller is None and global_step >= args.relora_warmstart_steps:
-                relora_controller = ReLoRAController.apply(
+            if is_relora_like and relora_controller is None and global_step >= args.relora_warmstart_steps:
+                if args.param_mode == "superlora":
+                    relora_controller = ReLoRAController.apply_superlora(
+                        model,
+                        merge_interval=args.relora_merge_interval,
+                        rank=args.relora_rank,
+                        alpha=args.relora_alpha,
+                        group_count=args.superlora_group,
+                        projection=args.superlora_projection,
+                        shuffle=args.superlora_shuffle,
+                        shuffle_interval=superlora_shuffle_interval,
+                        scope=args.relora_scope,
+                        dropout=args.relora_dropout,
+                        train_bias=args.relora_train_bias,
+                        init_method=args.relora_init,
+                        reset_optimizer_state=args.relora_reset_optimizer,
+                        prune_optimizer_state_fraction=args.relora_prune_optimizer_fraction,
+                    )
+                else:
+                    relora_controller = ReLoRAController.apply(
+                        model,
+                        merge_interval=args.relora_merge_interval,
+                        rank=args.relora_rank,
+                        alpha=args.relora_alpha,
+                        scope=args.relora_scope,
+                        dropout=args.relora_dropout,
+                        train_bias=args.relora_train_bias,
+                        init_method=args.relora_init,
+                        reset_optimizer_state=args.relora_reset_optimizer,
+                        prune_optimizer_state_fraction=args.relora_prune_optimizer_fraction,
+                    )
+                optimizer = build_optimizer(args, model)
+            if is_trac and trac_controller is None and global_step >= args.trac_warmstart_steps:
+                trac_controller = TracController.apply(
                     model,
-                    merge_interval=args.relora_merge_interval,
-                    rank=args.relora_rank,
-                    alpha=args.relora_alpha,
-                    scope=args.relora_scope,
-                    dropout=args.relora_dropout,
-                    train_bias=args.relora_train_bias,
-                    init_method=args.relora_init,
-                    reset_optimizer_state=args.relora_reset_optimizer,
-                    prune_optimizer_state_fraction=args.relora_prune_optimizer_fraction,
+                    merge_interval=args.trac_merge_interval,
+                    rank=args.trac_rank,
+                    alpha=args.trac_alpha,
+                    scope=args.trac_scope,
+                    dropout=args.trac_dropout,
+                    train_bias=args.trac_train_bias,
+                    init_method=args.trac_init,
+                    core_init=args.trac_core_init,
+                    inner_rank=args.trac_inner_rank,
+                    freeze_middle=args.trac_freeze_middle,
+                    reset_optimizer_state=args.trac_reset_optimizer,
+                    prune_optimizer_state_fraction=args.trac_prune_optimizer_fraction,
                 )
                 optimizer = build_optimizer(args, model)
 
-            if relora_controller is None and args.param_mode == "relora" and args.relora_warmstart_steps > 0:
+            if (
+                (relora_controller is None and is_relora_like and args.relora_warmstart_steps > 0)
+                or (trac_controller is None and is_trac and args.trac_warmstart_steps > 0)
+            ):
                 active_step_rule = "none"
                 active_direction = "none"
                 active_clip_mode = "none"
@@ -824,7 +965,7 @@ def main() -> int:
                 active_anderson_memory = args.anderson_memory
                 active_anderson_interval = args.anderson_interval
                 active_on_step_end = _on_step_end
-                active_relora = relora_controller
+                active_relora = relora_controller or trac_controller
 
             train_metrics, global_step = train_one_epoch(
                 model=model,
@@ -863,7 +1004,6 @@ def main() -> int:
                 direction_beta1=args.direction_beta1,
                 direction_damping=args.direction_damping,
                 direction_update_every=args.direction_update_every,
-                direction_max_size=args.direction_max_size,
                 gn_cg_iters=args.gn_cg_iters,
                 gn_cg_tol=args.gn_cg_tol,
                 gn_layer_mode=args.gn_layer_mode,
@@ -883,6 +1023,11 @@ def main() -> int:
                 muon_scale_mode=args.muon_scale_mode,
                 muon_rms_scale=args.muon_rms_scale,
                 muon_hidden_size=args.muon_hidden_size,
+                muon_curv_beta2=args.muon_curv_beta2,
+                muon_curv_eps=args.muon_curv_eps,
+                muon_curv_ns_iters=args.muon_curv_ns_iters,
+                muon_curv_update_interval=args.muon_curv_update_interval,
+                muon_curv_mode=args.muon_curv_mode,
                 clip_mode=active_clip_mode,
                 clip_rho=args.clip_rho,
                 clip_alpha=args.clip_alpha,

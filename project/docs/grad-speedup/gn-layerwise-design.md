@@ -1,8 +1,8 @@
-# Layerwise GN Design Note (Proxy v0)
+# Layerwise GN Design Note (Proxy v0, deprecated)
 
-Purpose
-- Provide a lightweight stand-in for layerwise Gauss–Newton while the paper-accurate method is being developed.
-- Keep the implementation safe and observable (preconditioner stats and timing).
+Purpose (historical)
+- Proxy `gn-layerwise` has been removed from code; this note is retained for context only.
+- Use `gn-layerwise-exact` for any GN work going forward.
 
 Paper reference
 - Full + Layerwise GN: `project/docs/grad-speedup/papers/arxiv-2510.09378.pdf`.
@@ -21,12 +21,11 @@ Proxy implementation (current code)
 - Large layers can fall back to scalar scaling using mean(g^2).
 - This is **not** paper-accurate GN; treat as experimental / proxy only.
 
-Config knobs
+Config knobs (historical)
 - `direction_beta`: EMA coefficient for diag_ggn (0–1).
 - `direction_damping`: additive damping.
 - `direction_eps`: clamp for denominators.
 - `direction_update_every`: update cadence (every K steps).
-- `direction_max_size`: if >0, switch to scalar scaling when param.numel() exceeds this threshold.
 
 Guardrails
 - 1D parameters are skipped.

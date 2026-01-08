@@ -9,7 +9,9 @@ __pycache__/
 temp
 project/grad-speedup/queue/queue.txt
 project/grad-speedup/queue/queue.lock
+project/grad-speedup/data/
 project/runs/
 !project/runs/.gitkeep
+runs/
 project/data/
 project/docs/grad-speedup/papers/*.pdf

@@ -34,10 +34,15 @@ Core methods (implementation-critical)
 - Muon (scalable): arXiv:2502.16982
   - Base Muon update (Eq. 1) and Newton-Schulz iteration (Eq. 2), pages 2–3.
   - Scalable adjustments with weight decay and update RMS scaling (Eq. 3–7), pages 3–4.
+- TRAC (Tensor-Train LoRA, across-layer shared core): OpenReview: tz5yPWZp9W
+  - Tensor-Train decomposition of LoRA modules; shared core across layers (Abstract).
+  - Method details: Section 3 (TRAC), pages 2–4.
 
 Related / alternate
 - arXiv:2410.10800 (Optimizing (L0,L1)-Smooth Functions by Gradient Methods)
   - Complementary treatment of (L0,L1)-smooth methods; use as cross-check with the main (L0,L1)-GD paper.
+- SuperLoRA (BMVC 2024): bmva-archive.org.uk/bmvc/2024/papers/Paper_566/paper.pdf
+  - Group-wise LoRA with projection/shuffle; Section 3 (SuperLoRA), pages 3–4.
 
 Additional papers (unblocking pending methods)
 - SPS / SPS+Momentum: arXiv:2406.04142
